@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Domino's System</title>
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/bootstrap.min.css">
+  <link rel="stylesheet" href="css/styles.css">
+
+  <!-- ICONOS -->
+  <link
+    rel="stylesheet"
+    href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css"
+  >
+
+</head>
+
+<body>
+
+  <!-- NAVBAR -->
+
+  <header class="topbar">
+
+    <div class="d-flex align-items-center gap-3">
+
+      <button class="menu-btn" id="menuBtn">
+        <i class="fa-solid fa-bars"></i>
+      </button>
+
+      <h4 class="m-0">
+        Domino's System
+      </h4>
+
+    </div>
+
+  </header>
+
+  <!-- LAYOUT -->
+
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+
+    <aside class="sidebar" id="sidebar">
+
+      <ul>
+
+        <li>
+          <a href="index.html" class="active">
+            <i class="fa-solid fa-house"></i>
+            Dashboard
+          </a>
+        </li>
+
+        <li>
+          <a href="modules/simulador-2d/index.html">
+            <i class="fa-solid fa-gamepad"></i>
+            Simulador 2D
+          </a>
+        </li>
+
+        <li>
+          <a href="modules/entorno-3d/index.html">
+            <i class="fa-solid fa-cube"></i>
+            Entorno 3D
+          </a>
+        </li>
+
+        <li>
+          <a href="modules/panel kpis/index.html">
+            <i class="fa-solid fa-chart-line"></i>
+            Panel KPIs
+          </a>
+        </li>
+
+      </ul>
+
+    </aside>
+
+    <!-- MAIN -->
+
+    <main class="main-content">
+
+      <div class="welcome-card">
+
+        <div class="welcome-wrapper">
+
+          <div>
+
+            <h2>
+              Bienvenido
+            </h2>
+
+            <p>
+              Plataforma de capacitación y operaciones.
+            </p>
+
+          </div>
+
+          <div class="progress-box">
+
+            <p>
+              Progreso
+            </p>
+
+            <div class="progress-custom">
+              <div></div>
+            </div>
+
+          </div>
+
+        </div>
+
+      </div>
+
+      <!-- MODULOS -->
+
+      <div class="cards-grid">
+
+        <div class="module-card">
+
+          <i class="fa-solid fa-gamepad"></i>
+
+          <h5>
+            Simulador 2D
+          </h5>
+
+          <p>
+            Módulo de práctica.
+          </p>
+
+        </div>
+
+        <div class="module-card">
+
+          <i class="fa-solid fa-cube"></i>
+
+          <h5>
+            Entorno 3D
+          </h5>
+
+          <p>
+            Módulo interactivo.
+          </p>
+
+        </div>
+
+        <div class="module-card">
+
+          <i class="fa-solid fa-chart-line"></i>
+
+          <h5>
+            KPIs
+          </h5>
+
+          <p>
+            Métricas operativas.
+          </p>
+
+        </div>
+
+      </div>
+
+    </main>
+
+  </div>
+
+  <!-- JS -->
+
+  <script src="js/bootstrap.bundle.min.js"></script>
+  <script src="js/main.js"></script>
+
+</body>
+</html>
