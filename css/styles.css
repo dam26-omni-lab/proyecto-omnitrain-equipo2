@@ -1,0 +1,188 @@
+*{
+  margin:0;
+  padding:0;
+  box-sizing:border-box;
+}
+
+body{
+  font-family:Arial, sans-serif;
+  background:#f5f5f5;
+  overflow-x:hidden;
+}
+
+/* NAVBAR */
+
+.topbar{
+  height:70px;
+  background:white;
+  border-bottom:1px solid #ddd;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:0 20px;
+  position:sticky;
+  top:0;
+  z-index:1000;
+}
+
+.menu-btn{
+  border:none;
+  background:none;
+  font-size:22px;
+  display:none;
+}
+
+/* LAYOUT */
+
+.layout{
+  display:flex;
+  min-height:calc(100vh - 70px);
+}
+
+/* SIDEBAR */
+
+.sidebar{
+  width:260px;
+  background:white;
+  border-right:1px solid #ddd;
+  padding:20px;
+  transition:.3s;
+}
+
+.sidebar ul{
+  list-style:none;
+  padding-left:0;
+}
+
+.sidebar ul li{
+  margin-bottom:10px;
+}
+
+.sidebar ul li a{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  text-decoration:none;
+  color:black;
+  padding:12px;
+  border-radius:10px;
+}
+
+.sidebar ul li a:hover{
+  background:#efefef;
+}
+
+.sidebar ul li a.active{
+  border:1px solid #ccc;
+}
+
+/* MAIN */
+
+.main-content{
+  flex:1;
+  padding:20px;
+  width:100%;
+}
+
+/* CARD */
+
+.welcome-card,
+.module-card,
+.development-box{
+  background:white;
+  border:1px solid #ddd;
+  border-radius:15px;
+  padding:20px;
+}
+
+.welcome-wrapper{
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:20px;
+  flex-wrap:wrap;
+}
+
+.progress-box{
+  width:300px;
+  max-width:100%;
+}
+
+.progress-custom{
+  width:100%;
+  height:12px;
+  background:#ddd;
+  border-radius:20px;
+  overflow:hidden;
+  margin-top:10px;
+}
+
+.progress-custom div{
+  width:65%;
+  height:100%;
+  background:#999;
+}
+
+/* GRID */
+
+.cards-grid{
+  margin-top:25px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  gap:20px;
+}
+
+.module-card i{
+  font-size:28px;
+  margin-bottom:15px;
+}
+
+/* DEVELOPMENT */
+
+.development-box{
+  text-align:center;
+}
+
+/* RESPONSIVE */
+
+@media(max-width:991px){
+
+  .menu-btn{
+    display:block;
+  }
+
+  .sidebar{
+    position:fixed;
+    left:-100%;
+    top:70px;
+    width:250px;
+    height:100%;
+    z-index:1000;
+  }
+
+  .sidebar.show{
+    left:0;
+  }
+
+  .layout{
+    flex-direction:column;
+  }
+
+  .main-content{
+    width:100%;
+    padding:15px;
+  }
+
+}
+
+@media(max-width:576px){
+
+  .main-content{
+    padding:10px;
+  }
+
+  .cards-grid{
+    grid-template-columns:1fr;
+  }
+
+}
