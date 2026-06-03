@@ -6,16 +6,45 @@
 
 body{
   font-family:Arial, sans-serif;
-  background:#f5f5f5;
+  background:#f4f6f9;
   overflow-x:hidden;
+  color:#1d3557;
 }
 
-/* NAVBAR */
+/* =========================================
+   PALETA DE COLORES
+========================================= */
+
+/*
+
+AZUL PRINCIPAL:
+#0077b6
+
+AZUL OSCURO:
+#002244
+
+ROJO:
+#e31837
+
+VERDE:
+#13b97d
+
+GRIS CLARO:
+#f4f6f9
+
+BORDES:
+#dcdcdc
+
+*/
+
+/* =========================================
+   NAVBAR
+========================================= */
 
 .topbar{
   height:70px;
-  background:white;
-  border-bottom:1px solid #ddd;
+  background:#002244;
+  border-bottom:4px solid #e31837;
   display:flex;
   align-items:center;
   justify-content:space-between;
@@ -23,6 +52,7 @@ body{
   position:sticky;
   top:0;
   z-index:1000;
+  color:white;
 }
 
 .menu-btn{
@@ -30,21 +60,27 @@ body{
   background:none;
   font-size:22px;
   display:none;
+  color:white;
+  cursor:pointer;
 }
 
-/* LAYOUT */
+/* =========================================
+   LAYOUT
+========================================= */
 
 .layout{
   display:flex;
   min-height:calc(100vh - 70px);
 }
 
-/* SIDEBAR */
+/* =========================================
+   SIDEBAR
+========================================= */
 
 .sidebar{
   width:260px;
   background:white;
-  border-right:1px solid #ddd;
+  border-right:1px solid #dcdcdc;
   padding:20px;
   transition:.3s;
 }
@@ -63,20 +99,25 @@ body{
   align-items:center;
   gap:10px;
   text-decoration:none;
-  color:black;
-  padding:12px;
-  border-radius:10px;
+  color:#1d3557;
+  padding:14px;
+  border-radius:12px;
+  font-weight:600;
+  transition:.3s;
 }
 
 .sidebar ul li a:hover{
-  background:#efefef;
+  background:#eef5fb;
 }
 
 .sidebar ul li a.active{
-  border:1px solid #ccc;
+  background:#0077b6;
+  color:white;
 }
 
-/* MAIN */
+/* =========================================
+   MAIN
+========================================= */
 
 .main-content{
   flex:1;
@@ -84,15 +125,21 @@ body{
   width:100%;
 }
 
-/* CARD */
+/* =========================================
+   WELCOME CARD
+========================================= */
 
-.welcome-card,
-.module-card,
-.development-box{
-  background:white;
-  border:1px solid #ddd;
-  border-radius:15px;
-  padding:20px;
+.welcome-card{
+  background:linear-gradient(
+    135deg,
+    #0077b6,
+    #005b8f
+  );
+
+  color:white;
+  border-radius:20px;
+  padding:25px;
+  margin-bottom:25px;
 }
 
 .welcome-wrapper{
@@ -111,7 +158,7 @@ body{
 .progress-custom{
   width:100%;
   height:12px;
-  background:#ddd;
+  background:rgba(255,255,255,.2);
   border-radius:20px;
   overflow:hidden;
   margin-top:10px;
@@ -120,30 +167,86 @@ body{
 .progress-custom div{
   width:65%;
   height:100%;
-  background:#999;
+  background:#ffc300;
 }
 
-/* GRID */
+/* =========================================
+   GRID
+========================================= */
 
 .cards-grid{
-  margin-top:25px;
   display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(250px,1fr));
+  grid-template-columns:repeat(
+    auto-fit,
+    minmax(250px,1fr)
+  );
+
   gap:20px;
 }
 
-.module-card i{
-  font-size:28px;
-  margin-bottom:15px;
+/* =========================================
+   MODULE CARDS
+========================================= */
+
+.module-card{
+  background:white;
+  border:1px solid #dcdcdc;
+  border-radius:18px;
+  padding:25px;
+  text-decoration:none;
+  color:#1d3557;
+
+  transition:
+    transform .25s ease,
+    box-shadow .25s ease,
+    border-color .25s ease;
 }
 
-/* DEVELOPMENT */
+.module-card:hover{
+  transform:translateY(-6px);
+
+  box-shadow:
+    0 10px 25px rgba(0,0,0,.08);
+
+  border-color:#0077b6;
+}
+
+.module-card i{
+  font-size:32px;
+  margin-bottom:15px;
+  color:#0077b6;
+}
+
+.module-card h5{
+  margin-bottom:10px;
+  font-weight:700;
+}
+
+.module-card p{
+  color:#6c757d;
+  margin:0;
+}
+
+/* =========================================
+   DEVELOPMENT BOX
+========================================= */
 
 .development-box{
+  background:white;
+  border:1px solid #dcdcdc;
+  border-radius:18px;
+  padding:60px 20px;
   text-align:center;
 }
 
-/* RESPONSIVE */
+.development-box h2{
+  margin-bottom:15px;
+  color:#0077b6;
+}
+
+/* =========================================
+   RESPONSIVE
+========================================= */
 
 @media(max-width:991px){
 
@@ -173,6 +276,15 @@ body{
     padding:15px;
   }
 
+  .welcome-wrapper{
+    flex-direction:column;
+    align-items:flex-start;
+  }
+
+  .progress-box{
+    width:100%;
+  }
+
 }
 
 @media(max-width:576px){
@@ -184,5 +296,45 @@ body{
   .cards-grid{
     grid-template-columns:1fr;
   }
+
+  .welcome-card{
+    padding:20px;
+  }
+
+  .module-card{
+    padding:20px;
+  }
+
+}
+
+/* =========================================
+   LOGO DOMINO'S
+========================================= */
+
+.logo-container{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.logo-dominos{
+    width:55px;
+    height:auto;
+    object-fit:contain;
+}
+
+@media (max-width:768px){
+
+    .logo-dominos{
+        width:40px;
+    }
+
+    .topbar h4{
+        font-size:1rem;
+    }
+
+    .topbar small{
+        font-size:.75rem;
+    }
 
 }
