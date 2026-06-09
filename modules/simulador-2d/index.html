@@ -28,16 +28,15 @@
 
         <div class="d-flex align-items-center gap-3">
 
+            <!-- LOGO CLICKEABLE -->
+            <a href="../../index.html" class="logo-container">
 
+                <img
+                    src="../../images/logo.png"
+                    alt="Domino's Pizza"
+                    class="logo-dominos">
 
-          <div class="logo-container">
-
-              <img
-                src="../../images/logo.png"
-                alt="Domino's Pizza"
-                class="logo-dominos">
-
-          </div>
+            </a>
 
             <div>
 
@@ -55,17 +54,13 @@
 
     </div>
 
-    <div class="status-badge">
 
-        <i class="bi bi-broadcast"></i>
-
-        Cocina Conectada
-
-    </div>
 
 </header>
 
 <div class="layout">
+
+    <!-- SIDEBAR -->
 
     <aside class="sidebar" id="sidebar">
 
@@ -107,19 +102,107 @@
 
     </aside>
 
+    <!-- MAIN -->
+
     <main class="main-content">
 
-        <div class="development-box">
+        <!-- BANNER SUPERIOR -->
 
-            <i class="bi bi-controller icon-module"></i>
+        <section class="module-banner">
 
-            <h2>
-                Simulador de Cocina 2D
-            </h2>
+            <div>
 
-            <p>
-                🚧 Este módulo sigue en construcción.
-            </p>
+                <h2>
+                    MÓDULO DE APRENDIZAJE 2D
+                </h2>
+
+                <p>
+                    Simulador de operaciones y armado de pizzas
+                </p>
+
+            </div>
+
+            <div class="module-stats">
+
+                <div>
+                    <small>PUNTAJE</small>
+                    <h4>0</h4>
+                </div>
+
+                <div>
+                    <small>RACHA</small>
+                    <h4>0</h4>
+                </div>
+
+                <div>
+                    <small>TIEMPO</small>
+                    <h4>00:00</h4>
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- CONTENIDO PRINCIPAL -->
+
+        <div class="simulator-layout">
+
+            <!-- PANEL IZQUIERDO -->
+
+            <section class="sim-card info-panel">
+
+                <h5>COMANDA EN CURSO</h5>
+
+                <div class="placeholder-box"></div>
+
+                <div class="placeholder-box"></div>
+
+                <div class="placeholder-box"></div>
+
+                <div class="placeholder-box"></div>
+
+                <div class="placeholder-box"></div>
+
+            </section>
+
+            <!-- PANEL CENTRAL -->
+
+            <section class="sim-card simulator-panel">
+
+                <div class="pizza-placeholder"></div>
+
+                <div class="controls-placeholder">
+
+                    <div></div>
+                    <div></div>
+                    <div></div>
+                    <div></div>
+
+                </div>
+
+            </section>
+
+            <!-- PANEL DERECHO -->
+
+            <section class="sim-card process-panel">
+
+                <h5>PROCEDIMIENTO</h5>
+
+                <div class="step-placeholder"></div>
+
+                <div class="step-placeholder"></div>
+
+                <div class="step-placeholder"></div>
+
+                <div class="step-placeholder"></div>
+
+                <hr>
+
+                <div class="action-placeholder"></div>
+
+                <div class="action-placeholder"></div>
+
+            </section>
 
         </div>
 
@@ -129,6 +212,10 @@
 
 <script src="../../js/bootstrap.bundle.min.js"></script>
 <script src="../../js/main.js"></script>
+
+<footer class="footer">
+    © 2026 Domino's Pizza IP - Prototipo Interactivo de Evaluación de Layout y Distribución de Botones.
+</footer>
 
 </body>
 </html>

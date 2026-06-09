@@ -28,14 +28,15 @@
 
         <div class="d-flex align-items-center gap-3">
 
-            <div class="logo-container">
+            <!-- LOGO CLICKEABLE -->
+            <a href="../../index.html" class="logo-container">
 
-              <img
-                src="../../images/logo.png"
-                alt="Domino's Pizza"
-                class="logo-dominos">
+                <img
+                    src="../../images/logo.png"
+                    alt="Domino's Pizza"
+                    class="logo-dominos">
 
-            </div>
+            </a>
 
             <div>
 
@@ -53,17 +54,13 @@
 
     </div>
 
-    <div class="status-badge">
 
-        <i class="bi bi-broadcast"></i>
-
-        Cocina Conectada
-
-    </div>
 
 </header>
 
 <div class="layout">
+
+    <!-- SIDEBAR -->
 
     <aside class="sidebar" id="sidebar">
 
@@ -105,21 +102,69 @@
 
     </aside>
 
+    <!-- MAIN CONTENT -->
+
     <main class="main-content">
 
-        <div class="development-box">
+        <!-- HEADER -->
 
-            <i class="bi bi-graph-up-arrow icon-module"></i>
+        <section class="kpi-header">
 
-            <h2>
-                Panel KPIs
-            </h2>
+            <div>
 
-            <p>
-                🚧 Este módulo sigue en construcción.
-            </p>
+                <h2>
+                    PANEL DE INDICADORES DE RENDIMIENTO (KPIs)
+                </h2>
 
-        </div>
+                <p>
+                    Métricas analíticas basadas en tu sesión actual.
+                </p>
+
+            </div>
+
+            <div class="kpi-filter">
+                Filtro: Sesión de Práctica
+            </div>
+
+        </section>
+
+        <!-- TARJETAS KPI -->
+
+        <section class="kpi-cards">
+
+            <div class="kpi-card"></div>
+
+            <div class="kpi-card"></div>
+
+            <div class="kpi-card"></div>
+
+            <div class="kpi-card"></div>
+
+            <div class="kpi-card"></div>
+
+        </section>
+
+        <!-- GRAFICA -->
+
+        <section class="kpi-chart">
+
+            <h5>
+                Historial de Tiempos por Comanda
+            </h5>
+
+            <div class="chart-placeholder">
+
+                <div class="bar bar-1"></div>
+
+                <div class="bar bar-2"></div>
+
+                <div class="bar bar-3"></div>
+
+                <div class="bar bar-4"></div>
+
+            </div>
+
+        </section>
 
     </main>
 
@@ -127,6 +172,10 @@
 
 <script src="../../js/bootstrap.bundle.min.js"></script>
 <script src="../../js/main.js"></script>
+
+<footer class="footer">
+    © 2026 Domino's Pizza IP - Prototipo Interactivo de Evaluación de Layout y Distribución de Botones.
+</footer>
 
 </body>
 </html>
