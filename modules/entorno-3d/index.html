@@ -10,7 +10,7 @@
     <link rel="stylesheet" href="../../css/bootstrap.min.css">
 
     <link rel="stylesheet"
-    href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    href="../../css/bootstrap-icons.min.css">
 
     <link rel="stylesheet" href="../../css/styles.css">
 
@@ -28,17 +28,15 @@
 
         <div class="d-flex align-items-center gap-3">
 
+            <!-- LOGO CLICKEABLE -->
+            <a href="../../index.html" class="logo-container">
 
+                <img
+                    src="../../images/logo.png"
+                    alt="Domino's Pizza"
+                    class="logo-dominos">
 
-            <div class="logo-container">
-
-              <img
-                src="../../images/logo.png"
-                alt="Domino's Pizza"
-                class="logo-dominos">
-
-            </div>
-
+            </a>
 
             <div>
 
@@ -56,17 +54,12 @@
 
     </div>
 
-    <div class="status-badge">
-
-        <i class="bi bi-broadcast"></i>
-
-        Cocina Conectada
-
-    </div>
 
 </header>
 
 <div class="layout">
+
+    <!-- SIDEBAR -->
 
     <aside class="sidebar" id="sidebar">
 
@@ -108,19 +101,85 @@
 
     </aside>
 
+    <!-- MAIN CONTENT -->
+
     <main class="main-content">
 
-        <div class="development-box">
+        <!-- BANNER -->
 
-            <i class="bi bi-box-seam icon-module"></i>
+        <section class="module-banner">
 
-            <h2>
-                Entorno 3D
-            </h2>
+            <div>
 
-            <p>
-                🚧 Este módulo sigue en construcción.
-            </p>
+                <h2>
+                    MÓDULO DE ENTORNO 3D
+                </h2>
+
+                <p>
+                    Practica la ubicación física de hornos, mesas y utensilios de la tienda.
+                </p>
+
+            </div>
+
+            <div class="module-tag">
+                Familiarización Espacial
+            </div>
+
+        </section>
+
+        <!-- CONTENIDO PRINCIPAL -->
+
+        <div class="entorno-layout">
+
+            <!-- VISOR 3D -->
+
+            <section class="sim-card viewer-panel">
+
+                <div class="viewer-placeholder">
+
+                    <div class="kitchen-placeholder">
+
+                        <div class="kitchen-object"></div>
+
+                    </div>
+
+                </div>
+
+                <div class="viewer-footer">
+
+                    <span>
+                        Haz clic y arrastra para explorar la cocina.
+                    </span>
+
+                    <span class="viewer-badge">
+                        INTERACTIVO 3D
+                    </span>
+
+                </div>
+
+            </section>
+
+            <!-- PANEL DERECHO -->
+
+            <section class="sim-card stations-panel">
+
+                <h5>
+                    ESTACIONES DE TRABAJO
+                </h5>
+
+                <div class="station-card"></div>
+
+                <div class="station-card"></div>
+
+                <div class="station-card"></div>
+
+                <div class="station-card"></div>
+
+                <hr>
+
+                <div class="action-placeholder"></div>
+
+            </section>
 
         </div>
 
@@ -130,6 +189,10 @@
 
 <script src="../../js/bootstrap.bundle.min.js"></script>
 <script src="../../js/main.js"></script>
+
+<footer class="footer">
+    © 2026 Domino's Pizza IP - Prototipo Interactivo de Evaluación de Layout y Distribución de Botones.
+</footer>
 
 </body>
 </html>
