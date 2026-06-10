@@ -680,3 +680,51 @@ BORDES:
     align-items:center;
 
 }
+
+/* ===================================
+   PHASER RESPONSIVO
+=================================== */
+
+#game-container{
+
+    width:100%;
+    max-width:500px;
+
+    margin:auto;
+
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+#game-container canvas{
+
+    width:100% !important;
+    height:auto !important;
+
+    border-radius:12px;
+
+    display:block;
+}
+
+/* Tablets */
+
+@media (max-width:768px){
+
+    #game-container{
+
+        max-width:400px;
+    }
+
+}
+
+/* Celulares */
+
+@media (max-width:576px){
+
+    #game-container{
+
+        max-width:300px;
+    }
+
+}
