@@ -3,8 +3,8 @@ class Example extends Phaser.Scene {
     preload() {
 
         this.load.image(
-            'logo',
-            '../../images/perrocajeto.png'
+            "logo",
+            "../../images/perrocajeto.png"
         );
 
     }
@@ -12,14 +12,13 @@ class Example extends Phaser.Scene {
     create() {
 
         const logo = this.add.image(
-            400,
-            250,
-            'logo'
+            this.cameras.main.width / 2,
+            this.cameras.main.height / 2,
+            "logo"
         );
 
-        logo.setScale(0.35);
+        logo.setScale(0.25);
 
-        // efecto de brillo
         Phaser.Actions.AddEffectShine(logo);
 
     }
@@ -30,12 +29,17 @@ const config = {
 
     type: Phaser.AUTO,
 
-    width: 800,
-    height: 500,
+    parent: "game-container",
 
-    backgroundColor: '#f4f6f9',
+    width: 500,
+    height: 300,
 
-    parent: 'game-container',
+    backgroundColor: "#f4f6f9",
+
+    scale: {
+        mode: Phaser.Scale.FIT,
+        autoCenter: Phaser.Scale.CENTER_BOTH
+    },
 
     scene: Example
 
