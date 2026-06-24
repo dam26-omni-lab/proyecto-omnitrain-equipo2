@@ -4,7 +4,7 @@ class Example extends Phaser.Scene {
 
         this.load.image(
             "logo",
-            "../../images/perrocajeto.png"
+            "../../images/fondo.png"
         );
 
     }
@@ -17,7 +17,7 @@ class Example extends Phaser.Scene {
             "logo"
         );
 
-        logo.setScale(0.25);
+        logo.setScale(0.50);
 
         Phaser.Actions.AddEffectShine(logo);
 
@@ -31,8 +31,8 @@ const config = {
 
     parent: "game-container",
 
-    width: 500,
-    height: 300,
+    width: 600,
+    height: 600,
 
     backgroundColor: "#f4f6f9",
 
