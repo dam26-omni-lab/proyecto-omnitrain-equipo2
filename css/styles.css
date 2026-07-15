@@ -343,80 +343,86 @@ BORDES:
 
 }
 
-
 /* ===================================
    MODULO SIMULADOR
 =================================== */
 
 .module-banner{
-
     background:#fff;
     border-radius:16px;
-
     padding:20px;
-
     margin-bottom:20px;
-
     display:flex;
     justify-content:space-between;
     align-items:center;
-
     gap:20px;
 }
 
 .module-stats{
-
     display:flex;
     gap:30px;
 }
 
 .simulator-layout{
-
     display:grid;
-
     grid-template-columns:
-        1fr
-        1.3fr
-        0.8fr;
-
+        0.85fr
+        1.6fr
+        0.75fr;
     gap:20px;
 }
 
+.entorno-layout {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
 .sim-card{
-
     background:#fff;
-
     border-radius:16px;
-
     padding:20px;
-
     min-height:500px;
-
     border:1px solid #e5e5e5;
+}
+
+/* ===================================
+   ENTORNO 3D - CORRECCIONES
+=================================== */
+
+/* Quitar padding solo al contenedor del 3D para que no tenga bordes blancos */
+.viewer-panel {
+    padding: 0;
+    overflow: hidden;
+}
+
+/* Quitar el margen fantasma del canvas */
+#scene-container canvas {
+    display: block;
+    outline: none;
+}
+
+.simulator-panel{
+    min-height:760px;
 }
 
 /* IZQUIERDA */
 
 .info-panel{
-
     display:flex;
     flex-direction:column;
     gap:20px;
 }
 
 .placeholder-box{
-
     height:100px;
-
     border-radius:12px;
-
     background:#f3f4f6;
 }
 
 /* CENTRO */
 
 .simulator-panel{
-
     display:flex;
     flex-direction:column;
     justify-content:center;
@@ -424,57 +430,42 @@ BORDES:
 }
 
 .pizza-placeholder{
-
     width:320px;
     height:320px;
-
     border-radius:50%;
-
     background:#d9d9d9;
 }
 
 .controls-placeholder{
-
     display:flex;
     gap:15px;
-
     margin-top:30px;
 }
 
 .controls-placeholder div{
-
     width:18px;
     height:18px;
-
     border-radius:50%;
-
     background:#cfcfcf;
 }
 
 /* DERECHA */
 
 .process-panel{
-
     display:flex;
     flex-direction:column;
     gap:15px;
 }
 
 .step-placeholder{
-
     height:60px;
-
     border-radius:12px;
-
     background:#f3f4f6;
 }
 
 .action-placeholder{
-
     height:50px;
-
     border-radius:12px;
-
     background:#e0e0e0;
 }
 
@@ -483,39 +474,28 @@ BORDES:
 =================================== */
 
 @media (max-width:1200px){
-
     .simulator-layout{
-
         grid-template-columns:1fr;
     }
-
     .sim-card{
-
         min-height:auto;
     }
 }
 
 @media (max-width:768px){
-
     .module-banner{
-
         flex-direction:column;
         align-items:flex-start;
     }
-
     .module-stats{
-
         width:100%;
         justify-content:space-between;
     }
-
     .pizza-placeholder{
-
         width:220px;
         height:220px;
     }
 }
-
 
 /* =====================================
    PANEL KPIs
@@ -571,47 +551,30 @@ BORDES:
     background:#d9d9d9;
 }
 
-.bar-1{
-    height:70%;
-}
-
-.bar-2{
-    height:60%;
-}
-
-.bar-3{
-    height:50%;
-}
-
-.bar-4{
-    height:40%;
-}
+.bar-1{ height:70%; }
+.bar-2{ height:60%; }
+.bar-3{ height:50%; }
+.bar-4{ height:40%; }
 
 /* RESPONSIVE */
 
 @media (max-width:1200px){
-
     .kpi-cards{
         grid-template-columns:repeat(2,1fr);
     }
-
 }
 
 @media (max-width:768px){
-
     .kpi-header{
         flex-direction:column;
         align-items:flex-start;
     }
-
     .kpi-cards{
         grid-template-columns:1fr;
     }
-
     .chart-placeholder{
         height:220px;
     }
-
 }
 
 /* ---------- LOGO ---------- */
@@ -658,27 +621,21 @@ BORDES:
 /* ---------- RESPONSIVE ---------- */
 
 @media (max-width:768px){
-
     .welcome-bg-image{
         height:140px;
         opacity:.08;
     }
-
     .footer{
         font-size:.8rem;
         padding:12px;
     }
 }
 
-
 #game-container{
-
     width:100%;
-
     display:flex;
     justify-content:center;
     align-items:center;
-
 }
 
 /* ===================================
@@ -686,45 +643,126 @@ BORDES:
 =================================== */
 
 #game-container{
-
     width:100%;
-    max-width:500px;
-
+    max-width:700px;
     margin:auto;
-
     display:flex;
     justify-content:center;
     align-items:center;
 }
 
 #game-container canvas{
-
     width:100% !important;
     height:auto !important;
-
     border-radius:12px;
-
     display:block;
 }
 
 /* Tablets */
-
 @media (max-width:768px){
-
     #game-container{
-
-        max-width:400px;
+        max-width:520px;
     }
-
 }
 
 /* Celulares */
-
 @media (max-width:576px){
-
     #game-container{
-
-        max-width:300px;
+        max-width:380px;
     }
+}
 
+/* =====================================================
+   SIMULADOR 2D - CONTENIDO DINÁMICO (game.js)
+   Estilos para la comanda y el procedimiento que se
+   generan/actualizan en vivo desde el juego de Phaser.
+===================================================== */
+
+/* ---- Panel izquierdo: "COMANDA EN CURSO" ---- */
+
+.info-panel h5{
+    font-weight:700;
+    color:#1d3557;
+    margin-bottom:4px;
+}
+
+.ticket-order-num{
+    font-size:.8rem;
+    color:#6c757d;
+    font-weight:600;
+    margin-bottom:6px;
+}
+
+.ticket-list{
+    list-style:none;
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+}
+
+.ticket-list li{
+    background:#f3f4f6;
+    border:1px solid #e5e5e5;
+    border-radius:12px;
+    padding:12px 14px;
+    font-size:.9rem;
+    font-weight:600;
+    color:#1d3557;
+}
+
+/* ---- Panel derecho: "PROCEDIMIENTO" ---- */
+
+.process-panel h5{
+    font-weight:700;
+    color:#1d3557;
+    margin-bottom:4px;
+}
+
+.steps-list{
+    list-style:none;
+    counter-reset:paso;
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+}
+
+.steps-list li{
+    counter-increment:paso;
+    background:#f3f4f6;
+    border:1px solid #e5e5e5;
+    border-radius:12px;
+    padding:14px 14px 14px 44px;
+    position:relative;
+    font-size:.85rem;
+    font-weight:600;
+    color:#6c757d;
+    transition:.25s;
+}
+
+.steps-list li::before{
+    content:counter(paso);
+    position:absolute;
+    left:12px;
+    top:50%;
+    transform:translateY(-50%);
+    width:20px;
+    height:20px;
+    border-radius:50%;
+    background:#dcdcdc;
+    color:#fff;
+    font-size:.75rem;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    transition:.25s;
+}
+
+.steps-list li.step-active{
+    background:#eef5fb;
+    border-color:#0077b6;
+    color:#002244;
+}
+
+.steps-list li.step-active::before{
+    background:#0077b6;
 }

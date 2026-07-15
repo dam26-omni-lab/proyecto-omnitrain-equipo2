@@ -101,3 +101,100 @@ function onWindowResize() {
     orthographicCamera.updateProjectionMatrix();
     renderer.setSize(width, height);
 }
+
+function construirEntorno() {
+    // ======================================
+    // Texturas y Estructura Principal
+    // ======================================
+    const loader = new TextureLoader();
+    const floorTexture = loader.load('../images/piso_cocina.jpeg');
+    floorTexture.wrapS = floorTexture.wrapT = RepeatWrapping;
+    floorTexture.repeat.set(4, 4);
+
+    const wallTexture = loader.load('../images/mosaico_pizza.jpeg');
+    wallTexture.wrapS = wallTexture.wrapT = RepeatWrapping;
+    wallTexture.repeat.set(4, 2);
+
+    // Piso, Techo y Paredes
+    plane = new Mesh(new PlaneGeometry(20, 20), new MeshStandardMaterial({ map: floorTexture, roughness: 0.8, metalness: 0.1, side: DoubleSide, color: 0xeeeeee }));
+    plane.rotation.x = -Math.PI / 2; plane.receiveShadow = true; scene.add(plane);
+
+    const ceiling = new Mesh(new PlaneGeometry(20, 20), new MeshStandardMaterial({ color: 0xdcdcdc, roughness: 0.6, side: DoubleSide }));
+    ceiling.position.set(0, 10, 0); ceiling.rotation.x = Math.PI / 2; ceiling.receiveShadow = true; scene.add(ceiling);
+
+    const wallGeometry = new PlaneGeometry(20, 10);
+    const wallMaterial = new MeshStandardMaterial({ map: wallTexture, roughness: 0.7, metalness: 0.05, side: DoubleSide, color: 0xffffff });
+    
+    const backWall = new Mesh(wallGeometry, wallMaterial); backWall.position.set(0, 5, -10); scene.add(backWall);
+    const leftWall = new Mesh(wallGeometry, wallMaterial); leftWall.position.set(-10, 5, 0); leftWall.rotation.y = Math.PI / 2; scene.add(leftWall);
+    const rightWall = new Mesh(wallGeometry, wallMaterial); rightWall.position.set(10, 5, 0); rightWall.rotation.y = -Math.PI / 2; scene.add(rightWall);
+
+    // ======================================
+    // Materiales Profesionales
+    // ======================================
+    const matAcero = new MeshStandardMaterial({ color: 0xdcdcdc, metalness: 0.7, roughness: 0.2 });
+    const matAceroOscuro = new MeshStandardMaterial({ color: 0x8a9597, metalness: 0.8, roughness: 0.3 });
+    const matLadrillo = new MeshStandardMaterial({ color: 0x5a5a5a, metalness: 0.2, roughness: 0.8 });
+    const matNegro = new MeshStandardMaterial({ color: 0x222222 });
+    const matBlanco = new MeshStandardMaterial({ color: 0xfafafa, roughness: 0.5 });
+    const matCarton = new MeshStandardMaterial({ color: 0xdeb887, roughness: 0.9 }); 
+    const matMadera = new MeshStandardMaterial({ color: 0xa0522d, roughness: 0.7 }); 
+    const matMaderaOscura = new MeshStandardMaterial({ color: 0x4a2e2b, roughness: 0.9 }); 
+    const matMasa = new MeshStandardMaterial({ color: 0xfffdd0, roughness: 0.7 }); 
+    const matPizza = new MeshStandardMaterial({ color: 0xdf4722, roughness: 0.5 }); 
+    const matAgua = new MeshStandardMaterial({ color: 0xa5f3fc, roughness: 0.1, metalness: 0.1 }); 
+    const matRojoSalsa = new MeshStandardMaterial({ color: 0xcc2200 });
+    const matMostaza = new MeshStandardMaterial({ color: 0xffcc00 });
+    const geomPlato = new CylinderGeometry(0.35, 0.35, 0.02, 16);
+
+    // Detalles de Pared
+    const marcoPuerta = new Mesh(new BoxGeometry(2.2, 5.2, 0.1), matAceroOscuro); marcoPuerta.position.set(0, 2.6, -9.95);
+    const cuerpoPuerta = new Mesh(new BoxGeometry(2, 5, 0.05), matBlanco); cuerpoPuerta.position.set(0, 2.5, -9.9);
+    const picaporte = new Mesh(new SphereGeometry(0.06, 8, 8), matAcero); picaporte.position.set(-0.8, 2.5, -9.8);
+    scene.add(marcoPuerta); scene.add(cuerpoPuerta); scene.add(picaporte);
+
+    const relojBorde = new Mesh(new CylinderGeometry(0.45, 0.45, 0.1, 24), matNegro); relojBorde.position.set(0, 6.2, -9.9); relojBorde.rotation.x = Math.PI / 2;
+    const relojFondo = new Mesh(new CylinderGeometry(0.4, 0.4, 0.12, 24), matBlanco); relojFondo.position.set(0, 6.2, -9.87); relojFondo.rotation.x = Math.PI / 2;
+    scene.add(relojBorde); scene.add(relojFondo);
+
+    const rj = new Mesh(new BoxGeometry(1.6, 0.7, 0.05), matAceroOscuro); rj.position.set(3, 5.5, -9.95); scene.add(rj);
+
+    // ZONA 1: HORNO Y EXTRACCIÓN
+    const baseHorno = new Mesh(new BoxGeometry(5, 3.5, 3), matLadrillo); baseHorno.position.set(-4.5, 1.75, -8.5); baseHorno.castShadow = true;
+    const bocaHorno = new Mesh(new BoxGeometry(2.5, 1.2, 3.1), matNegro); bocaHorno.position.set(-4.5, 1.6, -8.5);
+    const campanaBase = new Mesh(new BoxGeometry(5.5, 1, 3.5), matAceroOscuro); campanaBase.position.set(-4.5, 5.5, -8.5); campanaBase.castShadow = true;
+    const campanaDucto = new Mesh(new BoxGeometry(1.5, 4, 1.5), matAceroOscuro); campanaDucto.position.set(-4.5, 8, -8.5);
+    scene.add(baseHorno); scene.add(bocaHorno); scene.add(campanaBase); scene.add(campanaDucto);
+
+    // ZONA 2: MESA CENTRAL DE PREPARACIÓN
+    const muebleCentralBase = new Mesh(new BoxGeometry(5.8, 1.4, 2.6), matBlanco); muebleCentralBase.position.set(-0.5, 0.7, 1.5); muebleCentralBase.castShadow = muebleCentralBase.receiveShadow = true; scene.add(muebleCentralBase);
+    const topeMesa = new Mesh(new BoxGeometry(6, 0.1, 2.8), matAcero); topeMesa.position.set(-0.5, 1.45, 1.5); topeMesa.castShadow = true; scene.add(topeMesa);
+    const estantePizzas = new Mesh(new BoxGeometry(3.5, 0.4, 1.4), matBlanco); estantePizzas.position.set(0.7, 1.7, 2.1); estantePizzas.castShadow = true; scene.add(estantePizzas);
+
+    for(let i = 0; i < 3; i++) {
+        const pizzaLista = new Mesh(new CylinderGeometry(0.5, 0.5, 0.04, 16), matPizza);
+        pizzaLista.position.set(-0.6 + (i * 1.2), 1.92, 2.1); pizzaLista.castShadow = true; scene.add(pizzaLista);
+    }
+    const tablaCorte = new Mesh(new BoxGeometry(1.6, 0.05, 1.2), matMadera); tablaCorte.position.set(-2, 1.53, 1.2); tablaCorte.castShadow = true; scene.add(tablaCorte);
+    const pizzaPrep = new Mesh(new CylinderGeometry(0.45, 0.45, 0.03, 16), matMasa); pizzaPrep.position.set(-2, 1.57, 1.2); scene.add(pizzaPrep);
+
+    const posMasas = [ [-1, 1.6, 0.8], [-1.4, 1.6, 0.8], [-1.2, 1.6, 1.1] ];
+    posMasas.forEach(pos => {
+        const bolita = new Mesh(new SphereGeometry(0.15, 16, 16), matMasa); bolita.position.set(...pos); bolita.castShadow = true; scene.add(bolita);
+    });
+
+    // ZONA 3: MESA AUXILIAR DE INGREDIENTES
+    const topeMesaAux = new Mesh(new BoxGeometry(2.5, 0.1, 1.6), matMaderaOscura); topeMesaAux.position.set(4.5, 1.6, -5.5); topeMesaAux.castShadow = true; scene.add(topeMesaAux);
+    const posPatasAux = [ [3.4, 0.8, -6.2], [5.6, 0.8, -6.2], [3.4, 0.8, -4.8], [5.6, 0.8, -4.8] ];
+    posPatasAux.forEach(pos => {
+        const pata = new Mesh(new BoxGeometry(0.08, 1.6, 0.08), matNegro); pata.position.set(...pos); pata.castShadow = true; scene.add(pata);
+    });
+    const bandejaIngredientes = new Mesh(new BoxGeometry(1.2, 0.04, 0.8), matBlanco); bandejaIngredientes.position.set(4.3, 1.67, -5.5); scene.add(bandejaIngredientes);
+
+    for(let i = 0; i < 4; i++) {
+        const tomate = new Mesh(new SphereGeometry(0.08, 8, 8), matRojoSalsa); tomate.position.set(4.0 + (i * 0.2), 1.74, -5.5); scene.add(tomate);
+    }
+
+    // Llamar a la continuación del escenario (Parte 3)
+    completarEscenario(matAcero, matBlanco, matNegro, matAgua, matMaderaOscura, matRojoSalsa, matMostaza, matCarton, matAceroOscuro, geomPlato);
+}

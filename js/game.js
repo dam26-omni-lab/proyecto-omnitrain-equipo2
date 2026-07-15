@@ -227,3 +227,200 @@ class OrderScene extends Phaser.Scene {
         startBtn.on("pointerdown", () => { this.scene.start("AssemblyScene"); });
     }
 }
+
+
+/* ============================================================================
+   DOMINO'S SYSTEM - SIMULADOR 2D DE ARMADO DE PIZZAS
+   Parte 2: AssemblyScene y OvenScene (Mecánicas de Interacción)
+   ============================================================================ */
+
+/* ---------------------------------------------------------------------------
+   6. ASSEMBLY SCENE - Estación de armado de la pizza
+--------------------------------------------------------------------------- */
+class AssemblyScene extends Phaser.Scene {
+    constructor() { super("AssemblyScene"); }
+
+    create() {
+        this.cameras.main.setBackgroundColor("#f4f6f9");
+        this.order = this.registry.get("currentOrder");
+
+        this.pizzaState = { sauce: false, cheese: false, toppings: {} };
+        TOPPING_KEYS.forEach(k => this.pizzaState.toppings[k] = 0);
+        this.historial = [];
+
+        actualizarProcedimientoDOM([
+            "1. Leer la comanda", "2. Untar la salsa", "3. Agregar el queso",
+            "4. Colocar los ingredientes", "5. Hornear la pizza", "6. Verificar contra el pedido"
+        ], 1);
+
+        this.add.text(GAME_WIDTH / 2, 20, "ARMA LA PIZZA", { fontFamily: "Arial", fontSize: "22px", fontStyle: "bold", color: "#333333" }).setOrigin(0.5);
+        this.add.image(GAME_WIDTH / 2, 190, "mesa_fondo");
+
+        this.pizzaX = GAME_WIDTH / 2; this.pizzaY = 190;
+        this.pizzaLayer = this.add.container(this.pizzaX, this.pizzaY);
+        this.pizzaLayer.add(this.add.image(0, 0, "masa_corteza"));
+        this.pizzaLayer.add(this.add.image(0, 0, "masa_base"));
+
+        this.imgSalsa = null; this.imgQueso = null;
+
+        this.crearBarraIngredientes();
+        this.crearBotonesAccion();
+    }
+
+    crearBarraIngredientes() {
+        const startY = 340, rowGap = 62, cols = 4, colGap = 148, startX = 76;
+        this.botonesTopping = {};
+
+        INGREDIENTS.forEach((ing, idx) => {
+            const col = idx % cols; const row = Math.floor(idx / cols);
+            const x = startX + col * colGap; const y = startY + row * rowGap;
+
+            const bg = this.add.image(x, y, "btn_bg").setInteractive({ useHandCursor: true });
+            const icono = this.add.image(x, y - 10, this.iconoDe(ing));
+            icono.setScale(ing.type === "topping" ? 1.1 : 0.7);
+
+            const label = this.add.text(x, y + 22, ing.name, {
+                fontFamily: "Arial", fontSize: "11px", color: "#333333", align: "center", wordWrap: { width: 108 }
+            }).setOrigin(0.5, 0);
+
+            if (ing.type === "topping") {
+                const contador = this.add.text(x + 48, y - 28, "0", {
+                    fontFamily: "Arial", fontSize: "13px", fontStyle: "bold", color: "#ffffff", backgroundColor: "#E31837", padding: { x: 6, y: 2 }
+                }).setOrigin(0.5);
+                this.botonesTopping[ing.key] = contador;
+            }
+
+            bg.on("pointerover", () => bg.setScale(1.04));
+            bg.on("pointerout", () => bg.setScale(1));
+            bg.on("pointerdown", () => this.onIngredienteClick(ing));
+        });
+    }
+
+    iconoDe(ing) {
+        if (ing.key === "salsa" || ing.key === "queso") return ing.key;
+        return "ing_" + ing.key;
+    }
+
+    crearBotonesAccion() {
+        const y = 570;
+
+        const undoBg = this.add.image(140, y, "btn_bg").setInteractive({ useHandCursor: true });
+        this.add.text(140, y, "↩ Deshacer", { fontFamily: "Arial", fontSize: "13px", color: "#333333" }).setOrigin(0.5);
+        undoBg.on("pointerdown", () => this.deshacer());
+
+        const resetBg = this.add.image(300, y, "btn_bg").setInteractive({ useHandCursor: true });
+        this.add.text(300, y, "⟳ Reiniciar", { fontFamily: "Arial", fontSize: "13px", color: "#333333" }).setOrigin(0.5);
+        resetBg.on("pointerdown", () => this.reiniciar());
+
+        this.hornoBg = this.add.image(470, y, "btn_primary_bg").setDisplaySize(150, 60).setInteractive({ useHandCursor: true });
+        this.hornoLabel = this.add.text(470, y, "🔥 Meter al horno", { fontFamily: "Arial", fontSize: "13px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0.5);
+        this.actualizarEstadoBotonHorno();
+        this.hornoBg.on("pointerdown", () => {
+            if (!this.pizzaState.sauce) return;
+            this.scene.start("OvenScene", { order: this.order, pizzaState: this.pizzaState });
+        });
+    }
+
+    actualizarEstadoBotonHorno() {
+        const habilitado = this.pizzaState.sauce;
+        this.hornoBg.setAlpha(habilitado ? 1 : 0.4);
+        this.hornoLabel.setAlpha(habilitado ? 1 : 0.4);
+    }
+
+    onIngredienteClick(ing) {
+        if (ing.type === "sauce") {
+            if (this.pizzaState.sauce) return;
+            this.pizzaState.sauce = true;
+            this.imgSalsa = this.add.image(0, 0, "salsa"); this.pizzaLayer.add(this.imgSalsa);
+            this.historial.push({ tipo: "sauce" }); this.actualizarEstadoBotonHorno(); return;
+        }
+        if (ing.type === "cheese") {
+            if (!this.pizzaState.sauce || this.pizzaState.cheese) return;
+            this.pizzaState.cheese = true;
+            this.imgQueso = this.add.image(0, 0, "queso"); this.pizzaLayer.add(this.imgQueso);
+            this.historial.push({ tipo: "cheese" }); return;
+        }
+        if (!this.pizzaState.sauce || this.pizzaState.toppings[ing.key] >= MAX_PIEZAS_POR_TOPPING) return;
+
+        const angulo = Math.random() * Math.PI * 2; const radio = Math.random() * 85;
+        const px = Math.cos(angulo) * radio; const py = Math.sin(angulo) * radio;
+
+        const pieza = this.add.image(px, py, "ing_" + ing.key);
+        pieza.setAngle(randInt(0, 359)); this.pizzaLayer.add(pieza);
+
+        this.pizzaState.toppings[ing.key] += 1;
+        this.historial.push({ tipo: "topping", key: ing.key, obj: pieza });
+        this.botonesTopping[ing.key].setText(String(this.pizzaState.toppings[ing.key]));
+    }
+
+    deshacer() {
+        const ultimo = this.historial.pop(); if (!ultimo) return;
+        if (ultimo.tipo === "sauce") { this.imgSalsa.destroy(); this.imgSalsa = null; this.pizzaState.sauce = false; }
+        else if (ultimo.tipo === "cheese") { this.imgQueso.destroy(); this.imgQueso = null; this.pizzaState.cheese = false; }
+        else if (ultimo.tipo === "topping") { ultimo.obj.destroy(); this.pizzaState.toppings[ultimo.key] -= 1; this.botonesTopping[ultimo.key].setText(String(this.pizzaState.toppings[ultimo.key])); }
+        this.actualizarEstadoBotonHorno();
+    }
+
+    reiniciar() { while (this.historial.length > 0) this.deshacer(); }
+}
+
+/* ---------------------------------------------------------------------------
+   7. OVEN SCENE - Estación de cocción y barra interactiva
+--------------------------------------------------------------------------- */
+class OvenScene extends Phaser.Scene {
+    constructor() { super("OvenScene"); }
+    init(data) { this.order = data.order; this.pizzaState = data.pizzaState; }
+
+    create() {
+        this.cameras.main.setBackgroundColor("#2b1f18");
+        actualizarProcedimientoDOM(["1. Leer la comanda", "2. Untar la salsa", "3. Agregar el queso", "4. Colocar los ingredientes", "5. Hornear la pizza", "6. Verificar contra el pedido"], 4);
+
+        this.add.text(GAME_WIDTH / 2, 30, "HORNEANDO LA PIZZA", { fontFamily: "Arial", fontSize: "22px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0.5);
+        this.add.image(GAME_WIDTH / 2, 220, "horno_fondo");
+
+        this.pizzaImg = this.add.image(GAME_WIDTH / 2, 220, "masa_corteza").setScale(0.5).setTint(0xE9C287);
+        this.add.image(GAME_WIDTH / 2, 220, "salsa").setScale(0.5);
+        if (this.pizzaState.cheese) this.add.image(GAME_WIDTH / 2, 220, "queso").setScale(0.5);
+
+        const barX = 100, barY = 380, barW = 400, barH = 30;
+        const gfx = this.add.graphics();
+        const anchoCruda = (HORNEADO.zonaCrudaHasta / 100) * barW;
+        const anchoPerfecta = ((HORNEADO.zonaPerfectaHasta - HORNEADO.zonaCrudaHasta) / 100) * barW;
+        const anchoQuemada = barW - anchoCruda - anchoPerfecta;
+
+        gfx.fillStyle(0xF4D53E, 1); gfx.fillRect(barX, barY, anchoCruda, barH);
+        gfx.fillStyle(0x8BC34A, 1); gfx.fillRect(barX + anchoCruda, barY, anchoPerfecta, barH);
+        gfx.fillStyle(0x4A2C1D, 1); gfx.fillRect(barX + anchoCruda + anchoPerfecta, barY, anchoQuemada, barH);
+        gfx.lineStyle(3, 0xffffff, 1); gfx.strokeRect(barX, barY, barW, barH);
+
+        this.add.text(GAME_WIDTH / 2, barY - 20, "Saca la pizza cuando el indicador esté en la zona VERDE", { fontFamily: "Arial", fontSize: "13px", color: "#ffcc80" }).setOrigin(0.5);
+        this.indicador = this.add.rectangle(barX, barY + barH / 2, 6, barH + 10, 0xffffff);
+        this.estadoText = this.add.text(GAME_WIDTH / 2, barY + barH + 16, "CRUDA", { fontFamily: "Arial", fontSize: "15px", fontStyle: "bold", color: "#F4D53E" }).setOrigin(0.5);
+
+        this.barX = barX; this.barW = barW; this.terminado = false;
+
+        const sacarBg = this.add.image(GAME_WIDTH / 2, 470, "btn_accent_bg").setInteractive({ useHandCursor: true });
+        this.add.image(GAME_WIDTH / 2 - 70, 470, "ut_pala").setScale(0.5);
+        this.add.text(GAME_WIDTH / 2, 470, "SACAR PIZZA", { fontFamily: "Arial", fontSize: "16px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0.5);
+        sacarBg.on("pointerdown", () => this.sacarPizza());
+
+        this.hornTween = this.tweens.addCounter({
+            from: 0, to: 100, duration: HORNEADO.duracionMs,
+            onUpdate: (tween) => {
+                const progresoPct = tween.getValue();
+                this.indicador.x = this.barX + (progresoPct / 100) * this.barW;
+                if (progresoPct < HORNEADO.zonaCrudaHasta) { this.estadoText.setText("CRUDA").setColor("#F4D53E"); }
+                else if (progresoPct <= HORNEADO.zonaPerfectaHasta) { this.estadoText.setText("¡PERFECTA! SÁCALA AHORA").setColor("#2e7d32"); }
+                else { this.estadoText.setText("SE ESTÁ QUEMANDO").setColor("#c62828"); this.pizzaImg.setTint(0x8a5a2b); }
+            },
+            onComplete: () => this.sacarPizza()
+        });
+    }
+
+    sacarPizza() {
+        if (this.terminado) return; this.terminado = true;
+        const progresoPct = this.hornTween.getValue(); this.hornTween.stop();
+        let resultado = progresoPct < HORNEADO.zonaCrudaHasta ? "cruda" : (progresoPct <= HORNEADO.zonaPerfectaHasta ? "perfecta" : "quemada");
+        this.scene.start("ResultScene", { order: this.order, pizzaState: this.pizzaState, bakeResult: resultado });
+    }
+}
