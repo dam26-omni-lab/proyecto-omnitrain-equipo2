@@ -357,12 +357,6 @@ function init() {
         pantalla.castShadow = true;
         grupoLampara.add(pantalla);
         
-        
-        const pantalla = new Mesh(new CylinderGeometry(0.12, 0.45, 0.5, 16), matAceroOscuro);
-        pantalla.position.set(0, 7.55, 0);
-        pantalla.castShadow = true;
-        grupoLampara.add(pantalla);
-        
         const focoMat = new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe5aa, emissiveIntensity: 1.8 });
         const foco = new Mesh(new SphereGeometry(0.12, 8, 8), focoMat);
         foco.position.set(0, 7.35, 0);
@@ -459,5 +453,4 @@ function onWindowResize() {
     orthographicCamera.updateProjectionMatrix();
 
     renderer.setSize(width, height);
-}
 }
