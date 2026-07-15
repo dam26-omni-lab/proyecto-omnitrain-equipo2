@@ -198,3 +198,145 @@ function construirEntorno() {
     // Llamar a la continuación del escenario (Parte 3)
     completarEscenario(matAcero, matBlanco, matNegro, matAgua, matMaderaOscura, matRojoSalsa, matMostaza, matCarton, matAceroOscuro, geomPlato);
 }
+
+function completarEscenario(matAcero, matBlanco, matNegro, matAgua, matMaderaOscura, matRojoSalsa, matMostaza, matCarton, matAceroOscuro, geomPlato) {
+    // ZONA 4: REFRIGERADOR Y BASURA
+    const refriCuerpo = new Mesh(new BoxGeometry(2.6, 6, 2.4), matAcero); refriCuerpo.position.set(-8.5, 3, -8); refriCuerpo.castShadow = true;
+    const puertaRefri = new Mesh(new BoxGeometry(2.4, 5.6, 0.1), matBlanco); puertaRefri.position.set(-8.5, 3.1, -6.75);
+    scene.add(refriCuerpo); scene.add(puertaRefri);
+
+    const boteBasura = new Mesh(new BoxGeometry(1, 1.4, 1), matNegro); boteBasura.position.set(-4.5, 0.7, 1.5); boteBasura.castShadow = true; scene.add(boteBasura);
+
+    // ZONA 5: ESTACIÓN DE LAVADO
+    const cuerpoFregadero = new Mesh(new BoxGeometry(2.8, 1.8, 2.2), matBlanco); cuerpoFregadero.position.set(7.5, 0.9, 1.5); cuerpoFregadero.castShadow = true; scene.add(cuerpoFregadero);
+    const aguaFregadero = new Mesh(new BoxGeometry(2.5, 0.1, 1.9), matAgua); aguaFregadero.position.set(7.5, 1.72, 1.5); scene.add(aguaFregadero);
+
+    for(let i = 0; i < 5; i++) {
+        const platoLavado = new Mesh(geomPlato, matBlanco); platoLavado.position.set(7.3, 1.76 + (i * 0.03), 1.3); platoLavado.rotation.z = 0.15; scene.add(platoLavado);
+    }
+
+    // ZONA 6: REPISA LARGA DE PARED
+    const repisaFlotante = new Mesh(new BoxGeometry(0.4, 0.15, 6.5), matMaderaOscura); repisaFlotante.position.set(9.75, 5, -1.5); repisaFlotante.castShadow = true; scene.add(repisaFlotante);
+
+    for(let i = 0; i < 4; i++) {
+        const botella = new Mesh(new CylinderGeometry(0.08, 0.08, 0.4, 8), (i % 2 === 0) ? matRojoSalsa : matMostaza);
+        botella.position.set(9.7, 5.3, -3.5 + (i * 0.3)); scene.add(botella);
+    }
+    for(let j = 0; j < 2; j++) { 
+        for(let i = 0; i < 6; i++) {
+            const platoEstante = new Mesh(geomPlato, matBlanco); platoEstante.position.set(9.7, 5.1 + (i * 0.03), -1 + (j * 1)); scene.add(platoEstante);
+        }
+    }
+
+    // ZONA 7: RECEPCIÓN Y MOSTRADOR
+    const baseMostrador = new Mesh(new BoxGeometry(2, 2.2, 3), matBlanco); baseMostrador.position.set(8.5, 1.1, 5.5); baseMostrador.castShadow = true;
+    const topeMostrador = new Mesh(new BoxGeometry(2.1, 0.1, 3.1), matAcero); topeMostrador.position.set(8.5, 2.25, 5.5);
+    scene.add(baseMostrador); scene.add(topeMostrador);
+
+    const geomCaja = new BoxGeometry(1.4, 0.12, 1.4);
+    for(let i = 0; i < 5; i++) {
+        const caja = new Mesh(geomCaja, matCarton); caja.position.set(8.5, 2.36 + (i * 0.13), 5.5);
+        if(i % 2 !== 0) caja.rotation.y = 0.08; caja.castShadow = true; scene.add(caja);
+    }
+
+    // ===================================================
+    // LÁMPARAS COLGANTES E ILUMINACIÓN
+    // ===================================================
+    const crearLamparaColgante = (x, z) => {
+        const grupoLampara = new Group();
+        const cable = new Mesh(new CylinderGeometry(0.02, 0.02, 2.2, 8), matNegro); cable.position.set(0, 8.9, 0); grupoLampara.add(cable);
+        const pantalla = new Mesh(new CylinderGeometry(0.12, 0.45, 0.5, 16), matAceroOscuro); pantalla.position.set(0, 7.55, 0); pantalla.castShadow = true; grupoLampara.add(pantalla);
+        
+        const foco = new Mesh(new SphereGeometry(0.12, 8, 8), new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe5aa, emissiveIntensity: 1.8 }));
+        foco.position.set(0, 7.35, 0); grupoLampara.add(foco);
+        
+        const luzPuntual = new PointLight(0xfff3e0, 8, 12); luzPuntual.position.set(0, 7.2, 0); grupoLampara.add(luzPuntual);
+        grupoLampara.position.set(x, 0, z); scene.add(grupoLampara);
+    };
+
+    crearLamparaColgante(-2.5, 1.5);
+    crearLamparaColgante(3.5, 1.5);
+
+    // Iluminación General del Ambiente
+    ambientLight = new AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
+
+    directionalLight = new DirectionalLight(0xffffff, 0.95);
+    directionalLight.position.set(0, 20, 10); directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.left = -12; directionalLight.shadow.camera.right = 12;
+    directionalLight.shadow.camera.top = 12; directionalLight.shadow.camera.bottom = -12;
+    scene.add(directionalLight);
+
+    luzHorno = new PointLight(0xff4500, 20, 6); luzHorno.position.set(-4.5, 1.6, -7); scene.add(luzHorno);
+}
+
+function completarEscenario(matAcero, matBlanco, matNegro, matAgua, matMaderaOscura, matRojoSalsa, matMostaza, matCarton, matAceroOscuro, geomPlato) {
+    // ZONA 4: REFRIGERADOR Y BASURA
+    const refriCuerpo = new Mesh(new BoxGeometry(2.6, 6, 2.4), matAcero); refriCuerpo.position.set(-8.5, 3, -8); refriCuerpo.castShadow = true;
+    const puertaRefri = new Mesh(new BoxGeometry(2.4, 5.6, 0.1), matBlanco); puertaRefri.position.set(-8.5, 3.1, -6.75);
+    scene.add(refriCuerpo); scene.add(puertaRefri);
+
+    const boteBasura = new Mesh(new BoxGeometry(1, 1.4, 1), matNegro); boteBasura.position.set(-4.5, 0.7, 1.5); boteBasura.castShadow = true; scene.add(boteBasura);
+
+    // ZONA 5: ESTACIÓN DE LAVADO
+    const cuerpoFregadero = new Mesh(new BoxGeometry(2.8, 1.8, 2.2), matBlanco); cuerpoFregadero.position.set(7.5, 0.9, 1.5); cuerpoFregadero.castShadow = true; scene.add(cuerpoFregadero);
+    const aguaFregadero = new Mesh(new BoxGeometry(2.5, 0.1, 1.9), matAgua); aguaFregadero.position.set(7.5, 1.72, 1.5); scene.add(aguaFregadero);
+
+    for(let i = 0; i < 5; i++) {
+        const platoLavado = new Mesh(geomPlato, matBlanco); platoLavado.position.set(7.3, 1.76 + (i * 0.03), 1.3); platoLavado.rotation.z = 0.15; scene.add(platoLavado);
+    }
+
+    // ZONA 6: REPISA LARGA DE PARED
+    const repisaFlotante = new Mesh(new BoxGeometry(0.4, 0.15, 6.5), matMaderaOscura); repisaFlotante.position.set(9.75, 5, -1.5); repisaFlotante.castShadow = true; scene.add(repisaFlotante);
+
+    for(let i = 0; i < 4; i++) {
+        const botella = new Mesh(new CylinderGeometry(0.08, 0.08, 0.4, 8), (i % 2 === 0) ? matRojoSalsa : matMostaza);
+        botella.position.set(9.7, 5.3, -3.5 + (i * 0.3)); scene.add(botella);
+    }
+    for(let j = 0; j < 2; j++) { 
+        for(let i = 0; i < 6; i++) {
+            const platoEstante = new Mesh(geomPlato, matBlanco); platoEstante.position.set(9.7, 5.1 + (i * 0.03), -1 + (j * 1)); scene.add(platoEstante);
+        }
+    }
+
+    // ZONA 7: RECEPCIÓN Y MOSTRADOR
+    const baseMostrador = new Mesh(new BoxGeometry(2, 2.2, 3), matBlanco); baseMostrador.position.set(8.5, 1.1, 5.5); baseMostrador.castShadow = true;
+    const topeMostrador = new Mesh(new BoxGeometry(2.1, 0.1, 3.1), matAcero); topeMostrador.position.set(8.5, 2.25, 5.5);
+    scene.add(baseMostrador); scene.add(topeMostrador);
+
+    const geomCaja = new BoxGeometry(1.4, 0.12, 1.4);
+    for(let i = 0; i < 5; i++) {
+        const caja = new Mesh(geomCaja, matCarton); caja.position.set(8.5, 2.36 + (i * 0.13), 5.5);
+        if(i % 2 !== 0) caja.rotation.y = 0.08; caja.castShadow = true; scene.add(caja);
+    }
+
+    // ===================================================
+    // LÁMPARAS COLGANTES E ILUMINACIÓN
+    // ===================================================
+    const crearLamparaColgante = (x, z) => {
+        const grupoLampara = new Group();
+        const cable = new Mesh(new CylinderGeometry(0.02, 0.02, 2.2, 8), matNegro); cable.position.set(0, 8.9, 0); grupoLampara.add(cable);
+        const pantalla = new Mesh(new CylinderGeometry(0.12, 0.45, 0.5, 16), matAceroOscuro); pantalla.position.set(0, 7.55, 0); pantalla.castShadow = true; grupoLampara.add(pantalla);
+        
+        const foco = new Mesh(new SphereGeometry(0.12, 8, 8), new MeshStandardMaterial({ color: 0xffffff, emissive: 0xffe5aa, emissiveIntensity: 1.8 }));
+        foco.position.set(0, 7.35, 0); grupoLampara.add(foco);
+        
+        const luzPuntual = new PointLight(0xfff3e0, 8, 12); luzPuntual.position.set(0, 7.2, 0); grupoLampara.add(luzPuntual);
+        grupoLampara.position.set(x, 0, z); scene.add(grupoLampara);
+    };
+
+    crearLamparaColgante(-2.5, 1.5);
+    crearLamparaColgante(3.5, 1.5);
+
+    // Iluminación General del Ambiente
+    ambientLight = new AmbientLight(0xffffff, 0.4); scene.add(ambientLight);
+
+    directionalLight = new DirectionalLight(0xffffff, 0.95);
+    directionalLight.position.set(0, 20, 10); directionalLight.castShadow = true;
+    directionalLight.shadow.mapSize.width = directionalLight.shadow.mapSize.height = 2048;
+    directionalLight.shadow.camera.left = -12; directionalLight.shadow.camera.right = 12;
+    directionalLight.shadow.camera.top = 12; directionalLight.shadow.camera.bottom = -12;
+    scene.add(directionalLight);
+
+    luzHorno = new PointLight(0xff4500, 20, 6); luzHorno.position.set(-4.5, 1.6, -7); scene.add(luzHorno);
+}
