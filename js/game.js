@@ -424,3 +424,169 @@ class OvenScene extends Phaser.Scene {
         this.scene.start("ResultScene", { order: this.order, pizzaState: this.pizzaState, bakeResult: resultado });
     }
 }
+
+/* ---------------------------------------------------------------------------
+   8. RESULT SCENE - Comparación del pedido y asignación de puntajes
+--------------------------------------------------------------------------- */
+class ResultScene extends Phaser.Scene {
+    constructor() { super("ResultScene"); }
+    init(data) { this.order = data.order; this.pizzaState = data.pizzaState; this.bakeResult = data.bakeResult; }
+
+    create() {
+        this.cameras.main.setBackgroundColor("#f4f6f9");
+        actualizarProcedimientoDOM(["1. Leer la comanda", "2. Untar la salsa", "3. Agregar el queso", "4. Colocar los ingredientes", "5. Hornear la pizza", "6. Verificar contra el pedido"], 5);
+
+        const resultado = this.evaluarPizza();
+        this.aplicarPuntaje(resultado);
+
+        this.add.text(GAME_WIDTH / 2, 30, "RESULTADO DEL PEDIDO", { fontFamily: "Arial", fontSize: "22px", fontStyle: "bold", color: "#333333" }).setOrigin(0.5);
+
+        let y = 75;
+        const linea = (texto, color = "#333333", size = "14px") => {
+            this.add.text(GAME_WIDTH / 2, y, texto, { fontFamily: "Arial", fontSize: size, color }).setOrigin(0.5); y += 24;
+        };
+
+        this.add.text(90, y, "Ingrediente", { fontFamily: "Arial", fontSize: "13px", fontStyle: "bold", color: "#777" });
+        this.add.text(420, y, "Estado", { fontFamily: "Arial", fontSize: "13px", fontStyle: "bold", color: "#777" }); y += 24;
+
+        resultado.detalle.forEach(item => {
+            this.add.text(90, y, item.nombre, { fontFamily: "Arial", fontSize: "13px", color: "#333" });
+            this.add.text(420, y, item.ok ? "✅ Correcto" : (item.extra ? "❌ Sobra" : "❌ Falta"), { fontFamily: "Arial", fontSize: "13px", color: item.ok ? "#2e7d32" : "#c62828" });
+            y += 22;
+        });
+
+        y += 6;
+        const colorHorneado = this.bakeResult === "perfecta" ? "#2e7d32" : "#c62828";
+        const textoHorneado = { cruda: "Quedó CRUDA 🥶", perfecta: "Punto PERFECTO 🔥", quemada: "Se QUEMÓ 🔥💀" }[this.bakeResult];
+        linea(`Horneado: ${textoHorneado}`, colorHorneado, "16px");
+
+        y += 6;
+        linea(`Puntos obtenidos: +${resultado.puntos}`, "#006491", "18px");
+        linea(`Puntaje total: ${GameState.score}   |   Racha: ${GameState.streak}`, "#333333", "15px");
+
+        const esUltimoPedido = GameState.historialPedidos.length >= SESSION_ORDER_LIMIT;
+        const nextBg = this.add.image(GAME_WIDTH / 2, 540, "btn_primary_bg").setInteractive({ useHandCursor: true });
+        this.add.text(GAME_WIDTH / 2, 540, esUltimoPedido ? "VER RESUMEN DE KPIs ➜" : `SIGUIENTE PEDIDO (${GameState.historialPedidos.length}/${SESSION_ORDER_LIMIT}) ➜`, { fontFamily: "Arial", fontSize: "15px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0.5);
+        nextBg.on("pointerdown", () => { this.scene.start(esUltimoPedido ? "SummaryScene" : "OrderScene"); });
+    }
+
+    evaluarPizza() {
+        const detalle = []; let correctos = 0, faltantes = 0, extras = 0;
+
+        const okSalsa = this.order.sauce === this.pizzaState.sauce;
+        detalle.push({ nombre: "Salsa de tomate", ok: okSalsa, extra: !this.order.sauce && this.pizzaState.sauce });
+        okSalsa ? correctos++ : (this.order.sauce ? faltantes++ : extras++);
+
+        const okQueso = this.order.cheese === this.pizzaState.cheese;
+        detalle.push({ nombre: "Queso mozzarella", ok: okQueso, extra: !this.order.cheese && this.pizzaState.cheese });
+        okQueso ? correctos++ : (this.order.cheese ? faltantes++ : extras++);
+
+        TOPPING_KEYS.forEach(key => {
+            const ing = INGREDIENTS.find(i => i.key === key);
+            const requerido = this.order.toppings.includes(key); const presente = this.pizzaState.toppings[key] > 0;
+            const ok = requerido === presente;
+            detalle.push({ nombre: ing.name, ok, extra: !requerido && presente });
+            if (ok) correctos++; else if (requerido) faltantes++; else extras++;
+        });
+
+        const bakeOk = this.bakeResult === "perfecta"; const todoPerfecto = faltantes === 0 && extras === 0 && bakeOk;
+        let puntos = (correctos * 100) - (faltantes * 50) - (extras * 30);
+        if (bakeOk) puntos += 80; if (todoPerfecto) puntos += 150;
+        return { detalle, correctos, faltantes, extras, bakeOk, todoPerfecto, puntos: Math.max(puntos, 0) };
+    }
+
+    aplicarPuntaje(resultado) {
+        GameState.score += resultado.puntos;
+        GameState.streak = resultado.todoPerfecto ? GameState.streak + 1 : 0;
+        GameState.mejorRacha = Math.max(GameState.mejorRacha, GameState.streak);
+        GameState.historialPedidos.push({ puntos: resultado.puntos, correctos: resultado.correctos, faltantes: resultado.faltantes, extras: resultado.extras, bakeResult: this.bakeResult, perfecto: resultado.todoPerfecto });
+        actualizarPuntajeDOM();
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   9. SUMMARY SCENE - Cuadro final de analíticas (KPIs)
+--------------------------------------------------------------------------- */
+class SummaryScene extends Phaser.Scene {
+    constructor() { super("SummaryScene"); }
+
+    create() {
+        this.cameras.main.setBackgroundColor("#f4f6f9");
+        actualizarProcedimientoDOM(["Sesión de capacitación finalizada", "Revisa tu desempeño en el panel de KPIs", "Puedes iniciar una nueva sesión cuando quieras"], 1);
+
+        const panel = document.querySelector(".info-panel");
+        if (panel) {
+            panel.innerHTML = `<h5>SESIÓN FINALIZADA</h5><p style="font-size:.85rem;color:#6c757d;margin-top:8px;">Se completaron ${GameState.historialPedidos.length} pedidos. Revisa el panel de KPIs para ver tu desempeño detallado.</p>`;
+        }
+
+        const h = GameState.historialPedidos; const totalPedidos = h.length;
+        const pedidosPerfectos = h.filter(p => p.perfecto).length;
+        const promedioCorrectos = totalPedidos ? (h.reduce((a, p) => a + p.correctos, 0) / totalPedidos) : 0;
+        const conteoBake = { cruda: 0, perfecta: 0, quemada: 0 }; h.forEach(p => conteoBake[p.bakeResult]++);
+        const pctPerfectos = totalPedidos ? Math.round((pedidosPerfectos / totalPedidos) * 100) : 0;
+
+        this.add.text(GAME_WIDTH / 2, 30, "RESUMEN DE KPIs", { fontFamily: "Arial", fontSize: "24px", fontStyle: "bold", color: "#002244" }).setOrigin(0.5);
+        this.add.text(GAME_WIDTH / 2, 58, `Sesión de ${SESSION_ORDER_LIMIT} pedidos completada`, { fontFamily: "Arial", fontSize: "13px", color: "#6c757d" }).setOrigin(0.5);
+
+        const tarjetas = [
+            { titulo: "PUNTAJE TOTAL", valor: `${GameState.score}`, color: 0x0077b6 },
+            { titulo: "MEJOR RACHA", valor: `${GameState.mejorRacha}`, color: 0xe31837 },
+            { titulo: "PEDIDOS PERFECTOS", valor: `${pedidosPerfectos}/${totalPedidos} (${pctPerfectos}%)`, color: 0x13b97d },
+            { titulo: "PROMEDIO INGREDIENTES OK", valor: promedioCorrectos.toFixed(1), color: 0xffa000 }
+        ];
+
+        const cardW = 260, cardH = 78, gapX = 20, gapY = 16, startX = GAME_WIDTH / 2 - (cardW + gapX / 2), startY = 92;
+
+        tarjetas.forEach((t, i) => {
+            const col = i % 2; const row = Math.floor(i / 2);
+            const x = startX + col * (cardW + gapX); const y = startY + row * (cardH + gapY);
+
+            const g = this.add.graphics();
+            g.fillStyle(0xffffff, 1); g.fillRoundedRect(x, y, cardW, cardH, 12);
+            g.lineStyle(2, t.color, 1); g.strokeRoundedRect(x, y, cardW, cardH, 12);
+
+            this.add.text(x + 16, y + 14, t.titulo, { fontFamily: "Arial", fontSize: "11px", fontStyle: "bold", color: "#6c757d" });
+            this.add.text(x + 16, y + 34, t.valor, { fontFamily: "Arial", fontSize: "22px", fontStyle: "bold", color: Phaser.Display.Color.IntegerToColor(t.color).rgba });
+        });
+
+        const chartY = startY + 2 * (cardH + gapY) + 20;
+        this.add.text(GAME_WIDTH / 2, chartY, "PUNTO DE HORNEADO POR PEDIDO", { fontFamily: "Arial", fontSize: "13px", fontStyle: "bold", color: "#333333" }).setOrigin(0.5);
+
+        const barrasData = [
+            { label: "Cruda", valor: conteoBake.cruda, color: 0xF4D53E },
+            { label: "Perfecta", valor: conteoBake.perfecta, color: 0x13b97d },
+            { label: "Quemada", valor: conteoBake.quemada, color: 0x4A2C1D }
+        ];
+
+        const maxBarra = Math.max(1, ...barrasData.map(b => b.valor));
+        const chartBaseY = chartY + 130, chartMaxH = 100, barW = 70, chartStartX = GAME_WIDTH / 2 - 130;
+
+        barrasData.forEach((b, i) => {
+            const x = chartStartX + i * 130; const h = (b.valor / maxBarra) * chartMaxH;
+            const g = this.add.graphics();
+            g.fillStyle(b.color, 1); g.fillRoundedRect(x, chartBaseY - h, barW, Math.max(h, 4), 6);
+            this.add.text(x + barW / 2, chartBaseY + 10, `${b.label}\n${b.valor}`, { fontFamily: "Arial", fontSize: "12px", color: "#333333", align: "center" }).setOrigin(0.5, 0);
+        });
+
+        const btn = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT - 40, "btn_accent_bg").setInteractive({ useHandCursor: true });
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT - 40, "INICIAR NUEVA SESIÓN", { fontFamily: "Arial", fontSize: "15px", fontStyle: "bold", color: "#ffffff" }).setOrigin(0.5);
+
+        btn.on("pointerover", () => btn.setScale(1.04)); btn.on("pointerout", () => btn.setScale(1));
+        btn.on("pointerdown", () => { reiniciarSesion(); this.scene.start("OrderScene"); });
+    }
+}
+
+/* ---------------------------------------------------------------------------
+   10. CONFIGURACIÓN Y ARRANQUE DEL JUEGO (MOTOR)
+--------------------------------------------------------------------------- */
+const config = {
+    type: Phaser.AUTO,
+    parent: "game-container",
+    width: GAME_WIDTH,
+    height: GAME_HEIGHT,
+    backgroundColor: "#f4f6f9",
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scene: [BootScene, OrderScene, AssemblyScene, OvenScene, ResultScene, SummaryScene]
+};
+
+new Phaser.Game(config);

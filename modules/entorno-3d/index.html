@@ -1,193 +1,101 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
-
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
     <title>Entorno 3D</title>
-
     <link rel="stylesheet" href="../../css/bootstrap.min.css">
-
-    <link rel="stylesheet"
-    href="../../css/bootstrap-icons.min.css">
-
+    <link rel="stylesheet" href="../../css/bootstrap-icons.min.css">
     <link rel="stylesheet" href="../../css/styles.css">
-
 </head>
-
 <body>
 
 <header class="topbar">
-
     <div class="d-flex align-items-center gap-3">
-
         <button class="menu-btn" id="menuBtn">
             <i class="bi bi-list"></i>
         </button>
-
         <div class="d-flex align-items-center gap-3">
-
-            <!-- LOGO CLICKEABLE -->
             <a href="../../index.html" class="logo-container">
-
-                <img
-                    src="../../images/logo.png"
-                    alt="Domino's Pizza"
-                    class="logo-dominos">
-
+                <img src="../../images/logo.png" alt="Domino's Pizza" class="logo-dominos">
             </a>
-
             <div>
-
-                <h4 class="m-0 fw-bold">
-                    DOMINO'S SYSTEM
-                </h4>
-
-                <small>
-                    Plataforma Unificada de Capacitación
-                </small>
-
+                <h4 class="m-0 fw-bold">DOMINO'S SYSTEM</h4>
+                <small>Plataforma Unificada de Capacitación</small>
             </div>
-
         </div>
-
     </div>
-
-
 </header>
 
 <div class="layout">
-
-    <!-- SIDEBAR -->
-
     <aside class="sidebar" id="sidebar">
-
-        <h6 class="sidebar-title">
-            MÓDULOS DEL SISTEMA
-        </h6>
-
+        <h6 class="sidebar-title">MÓDULOS DEL SISTEMA</h6>
         <ul>
-
             <li>
                 <a href="../../index.html">
                     <i class="bi bi-house-door-fill"></i>
                     Dashboard
                 </a>
             </li>
-
             <li>
                 <a href="../simulador-2d/index.html">
                     <i class="bi bi-controller"></i>
                     Simulador 2D
                 </a>
             </li>
-
             <li>
                 <a href="#" class="active">
                     <i class="bi bi-box-seam"></i>
                     Entorno 3D
                 </a>
             </li>
-
             <li>
                 <a href="../panel-kpis/index.html">
                     <i class="bi bi-graph-up-arrow"></i>
                     Panel KPIs
                 </a>
             </li>
-
         </ul>
-
     </aside>
 
-    <!-- MAIN CONTENT -->
-
     <main class="main-content">
-
-        <!-- BANNER -->
-
         <section class="module-banner">
-
             <div>
-
-                <h2>
-                    MÓDULO DE ENTORNO 3D
-                </h2>
-
-                <p>
-                    Practica la ubicación física de hornos, mesas y utensilios de la tienda.
-                </p>
-
+                <h2>MÓDULO DE ENTORNO 3D</h2>
+                <p>Practica la ubicación física de hornos, mesas y utensilios de la tienda.</p>
             </div>
-
             <div class="module-tag">
                 Familiarización Espacial
             </div>
-
         </section>
 
-        <!-- CONTENIDO PRINCIPAL -->
-
         <div class="entorno-layout">
-
-            <!-- VISOR 3D -->
-
             <section class="sim-card viewer-panel">
-
-                <div class="viewer-placeholder">
-
-                    <div class="kitchen-placeholder">
-
-                        <div class="kitchen-object"></div>
-
-                    </div>
-
+                
+                <div class="viewer-placeholder" id="scene-container" style="width: 100%; min-height: 600px; position: relative; overflow: hidden; background-color: #73bba9;">
                 </div>
 
                 <div class="viewer-footer">
-
-                    <span>
-                        Haz clic y arrastra para explorar la cocina.
-                    </span>
-
-                    <span class="viewer-badge">
-                        INTERACTIVO 3D
-                    </span>
-
+                    <span>Haz clic y arrastra para explorar la cocina.</span>
+                    <span class="viewer-badge">INTERACTIVO 3D</span>
                 </div>
-
             </section>
-
-            <!-- PANEL DERECHO -->
 
             <section class="sim-card stations-panel">
-
-                <h5>
-                    ESTACIONES DE TRABAJO
-                </h5>
-
+                <h5>ESTACIONES DE TRABAJO</h5>
                 <div class="station-card"></div>
-
                 <div class="station-card"></div>
-
                 <div class="station-card"></div>
-
                 <div class="station-card"></div>
-
                 <hr>
-
                 <div class="action-placeholder"></div>
-
             </section>
-
         </div>
-
     </main>
-
 </div>
 
 <script src="../../js/bootstrap.bundle.min.js"></script>
+<script type="module" src="../../js/game3d.js"></script>
 <script src="../../js/main.js"></script>
 
 <footer class="footer">
