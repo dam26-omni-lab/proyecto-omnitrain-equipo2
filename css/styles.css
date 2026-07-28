@@ -400,10 +400,161 @@ BORDES:
 #scene-container canvas {
     display: block;
     outline: none;
+    cursor: grab;
 }
 
 .simulator-panel{
     min-height:760px;
+}
+
+/* ---- Overlay de carga del visor 3D (inyectado por game3d.js) ---- */
+.scene-loading{
+    position:absolute;
+    inset:0;
+    z-index:5;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    background:#0a0a0a;
+}
+
+.scene-loading-label{
+    font-family:Arial, sans-serif;
+    font-size:.85rem;
+    font-weight:700;
+    color:#f4f6f9;
+    letter-spacing:.03em;
+}
+
+.scene-loading-track{
+    width:220px;
+    height:6px;
+    border-radius:6px;
+    background:rgba(0,34,68,.15);
+    overflow:hidden;
+}
+
+.scene-loading-fill{
+    height:100%;
+    width:0%;
+    background:#0077b6;
+    transition:width .2s ease;
+}
+
+/* ---- Pie del visor 3D: hint de controles + badge ---- */
+.viewer-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 16px;
+    background:#f8f9fa;
+    border-top:1px solid #e5e5e5;
+    font-size:.8rem;
+    color:#6c757d;
+}
+
+.viewer-badge{
+    flex:none;
+    background:#0077b6;
+    color:#fff;
+    font-weight:700;
+    font-size:.7rem;
+    letter-spacing:.03em;
+    padding:5px 10px;
+    border-radius:20px;
+}
+
+/* ---- Panel derecho: ESTACIONES DE TRABAJO (stations-panel, generado por game3d.js) ---- */
+.stations-panel h5{
+    font-weight:700;
+    color:#1d3557;
+    margin-bottom:14px;
+}
+
+.station-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    margin-bottom:16px;
+}
+
+.station-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    width:100%;
+    text-align:left;
+    background:#f3f4f6;
+    border:1px solid #e5e5e5;
+    border-radius:12px;
+    padding:10px 14px;
+    font-size:.85rem;
+    font-weight:600;
+    color:#1d3557;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.station-item i{
+    font-size:1.05rem;
+    color:#0077b6;
+    flex:none;
+}
+
+.station-item:hover{
+    background:#eef5fb;
+    border-color:#0077b6;
+}
+
+.station-item.station-active{
+    background:#0077b6;
+    border-color:#0077b6;
+    color:#fff;
+}
+
+.station-item.station-active i{
+    color:#fff;
+}
+
+.station-detail{
+    background:#f8f9fa;
+    border:1px solid #e5e5e5;
+    border-radius:12px;
+    padding:14px 16px;
+    min-height:96px;
+}
+
+.station-detail h6{
+    font-weight:700;
+    color:#1d3557;
+    margin-bottom:6px;
+}
+
+.station-detail p{
+    font-size:.85rem;
+    color:#495057;
+    margin-bottom:0;
+}
+
+.station-tip{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    margin-top:10px;
+    padding:8px 10px;
+    background:#fff8e6;
+    border:1px solid #ffe4a3;
+    border-radius:10px;
+    font-size:.78rem;
+    color:#8a6d1a;
+}
+
+.station-tip i{
+    color:#e3a23b;
+    margin-top:1px;
 }
 
 /* IZQUIERDA */
@@ -766,3 +917,34 @@ BORDES:
 .steps-list li.step-active::before{
     background:#0077b6;
 }
+
+ /* Estilos específicos para centrar el login */
+        .login-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f4f5f7;
+            background-image: url('images/logo.png'); /* Marca de agua opcional */
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 300px;
+            background-blend-mode: overlay;
+        }
+        .login-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            max-width: 450px;
+            width: 100%;
+            border-top: 5px solid #e31837; /* Rojo Domino's */
+            padding: 2rem;
+            z-index: 10;
+        }
+        .btn-dominos {
+            background-color: #006491; /* Azul Domino's */
+            border: none;
+        }
+        .btn-dominos:hover {
+            background-color: #005073;
+        }
