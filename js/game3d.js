@@ -86,12 +86,12 @@ function init() {
 
     // 5. Texturas (RUTAS Y EXTENSIONES CORREGIDAS)
     const loader = new TextureLoader();
-    const floorTexture = loader.load('../images/piso_cocina.jpeg');
+    const floorTexture = loader.load('../../images/piso_cocina.jpeg');
     floorTexture.wrapS = RepeatWrapping;
     floorTexture.wrapT = RepeatWrapping;
     floorTexture.repeat.set(4, 4);
 
-    const wallTexture = loader.load('../images/mosaico_pizza.jpeg');
+    const wallTexture = loader.load('../../images/mosaico_pizza.jpeg');
     wallTexture.wrapS = RepeatWrapping;
     wallTexture.wrapT = RepeatWrapping;
     wallTexture.repeat.set(4, 2);
