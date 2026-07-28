@@ -25,6 +25,15 @@
             </div>
         </div>
     </div>
+
+        <!-- Sección Derecha: Botón de Login -->
+    <div>
+        <a href="../../login.html" class="btn btn-primary fw-bold rounded-pill px-4" style="background-color: #006491; border: none;">
+            <i class="bi bi-person-circle me-2"></i> Iniciar Sesión / Registrarse
+        </a>
+    </div>
+    
+
 </header>
 
 <div class="layout">
@@ -72,30 +81,33 @@
         <div class="entorno-layout">
             <section class="sim-card viewer-panel">
                 
-                <div class="viewer-placeholder" id="scene-container" style="width: 100%; min-height: 600px; position: relative; overflow: hidden; background-color: #73bba9;">
+                <div class="viewer-placeholder" id="scene-container" style="width: 100%; min-height: 600px; position: relative; overflow: hidden; background-color: #0a0a0a;">
                 </div>
 
                 <div class="viewer-footer">
-                    <span>Haz clic y arrastra para explorar la cocina.</span>
+                    <span>Haz clic y arrastra para explorar la cocina · rueda del mouse para acercar o alejar · clic sobre una zona para ver su información.</span>
                     <span class="viewer-badge">INTERACTIVO 3D</span>
                 </div>
             </section>
 
             <section class="sim-card stations-panel">
                 <h5>ESTACIONES DE TRABAJO</h5>
-                <div class="station-card"></div>
-                <div class="station-card"></div>
-                <div class="station-card"></div>
-                <div class="station-card"></div>
+                <div class="station-list"></div>
+                <div class="station-detail">
+                    <p class="text-muted mb-0">Cargando estaciones…</p>
+                </div>
                 <hr>
-                <div class="action-placeholder"></div>
+                <button type="button" class="btn btn-outline-primary w-100" id="btnVistaGeneral" disabled>
+                    <i class="bi bi-arrows-fullscreen"></i> Vista general
+                </button>
             </section>
         </div>
     </main>
 </div>
 
+
 <script src="../../js/bootstrap.bundle.min.js"></script>
-<script type="module" src="../../js/game3d.js"></script>
+<script type="module" src="../../js/game3d.js?v=2"></script>
 <script src="../../js/main.js"></script>
 
 <footer class="footer">
