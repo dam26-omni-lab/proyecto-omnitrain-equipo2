@@ -1,218 +1,259 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
 
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Plataforma de capacitación Domino's: simulador de armado, recorrido de cocina en 3D y seguimiento de desempeño.">
+    <title>Domino's System · Capacitación</title>
 
-    <title>Domino's System</title>
-
-    <!-- BOOTSTRAP -->
     <link rel="stylesheet" href="css/bootstrap.min.css">
-
-    <!-- BOOTSTRAP ICONS -->
-    <link rel="stylesheet" href="./css/bootstrap-icons.min.css">
-
-    <!-- CSS -->
+    <link rel="stylesheet" href="css/bootstrap-icons.min.css">
     <link rel="stylesheet" href="css/styles.css">
-
 </head>
 
 <body>
 
-<header class="topbar d-flex justify-content-between align-items-center px-4">
-
-    <!-- Sección Izquierda: Menú y Logo -->
-    <div class="d-flex align-items-center gap-3">
-
-        <button class="menu-btn" id="menuBtn">
-            <i class="bi bi-list"></i>
-        </button>
-
+    <header class="topbar">
         <div class="d-flex align-items-center gap-3">
+            <button class="menu-btn" id="menuBtn" aria-label="Abrir menú">
+                <i class="bi bi-list"></i>
+            </button>
 
-            <!-- LOGO CLICKEABLE -->
             <a href="index.html" class="logo-container">
-                <img src="images/logo.png" alt="Domino's Pizza" class="logo-dominos">
+                <img src="images/logo.png" alt="Domino's Pizza" class="logo-dominos" width="42" height="42">
             </a>
 
             <div>
-                <h4 class="m-0 fw-bold">
-                    DOMINO'S SYSTEM
-                </h4>
-                <small>
-                    Plataforma Unificada de Capacitación
-                </small>
+                <h4>DOMINO'S SYSTEM</h4>
+                <small>Plataforma Unificada de Capacitación</small>
             </div>
-
         </div>
 
-    </div>
-    
-    <!-- Sección Derecha: Botón de Login -->
-    <div>
-        <a href="login.html" class="btn btn-primary fw-bold rounded-pill px-4" style="background-color: #006491; border: none;">
-            <i class="bi bi-person-circle me-2"></i> Iniciar Sesión / Registrarse
-        </a>
-    </div>
+        <!-- La barra cambia según haya sesión o no. Lo resuelve portal.js. -->
+        <div class="cuenta">
+            <a href="login.html" class="btn-entrar" id="btnEntrar">
+                <i class="bi bi-person-circle"></i> Iniciar sesión
+            </a>
 
-</header>
-
-<div class="layout">
-
-    <!-- SIDEBAR -->
-
-    <aside class="sidebar" id="sidebar">
-
-        <h6 class="sidebar-title">
-            MÓDULOS DEL SISTEMA
-        </h6>
-
-        <ul>
-
-            <li>
-                <a href="index.html" class="active">
-                    <i class="bi bi-house-door-fill"></i>
-                    Dashboard
-                </a>
-            </li>
-
-            <li>
-                <a href="modules/simulador-2d/index.html">
-                    <i class="bi bi-controller"></i>
-                    Simulador 2D
-                </a>
-            </li>
-
-            <li>
-                <a href="modules/entorno-3d/index.html">
-                    <i class="bi bi-box-seam"></i>
-                    Entorno 3D
-                </a>
-            </li>
-
-            <li>
-                <a href="modules/panel-kpis/index.html">
-                    <i class="bi bi-graph-up-arrow"></i>
-                    Panel KPIs
-                </a>
-            </li>
-
-        </ul>
-
-    </aside>
-
-    <!-- MAIN -->
-
-    <main class="main-content">
-
-        <!-- BIENVENIDA -->
-
-        <section class="welcome-card">
-
-            <!-- IMAGEN DECORATIVA TRANSPARENTE -->
-            <img
-                src="images/logo.png"
-                alt="Decoración"
-                class="welcome-bg-image">
-
-            <div class="welcome-wrapper">
-
+            <div class="cuenta-chip oculto" id="chipCuenta">
                 <div>
-
-                    <span class="badge-custom">
-                        OPERADOR CERTIFICADO
-                    </span>
-
-                    <h1 class="welcome-title">
-                        ¡Bienvenido!
-                    </h1>
-
-                    <p>
-                        Plataforma de Capacitación Domino's Pizza
-                    </p>
-
+                    <span class="cuenta-nombre" id="cuentaNombre">Operador</sp
+                    <span class="cuenta-rol" id="cuentaRol">En sesión</span>
                 </div>
+                <span class="cuenta-inicial" id="cuentaInicial">O</span>
+            </div>
 
-                <div class="progress-box">
+            <button class="btn-salir oculto" id="btnSalir" title="Cerrar sesión" aria-label="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+            </button>
+        </div>
+    </header>
 
-                    <p class="mb-2 fw-semibold">
-                        Progreso de Capacitación
-                    </p>
+    <div class="layout">
 
-                    <div class="progress-custom">
-                        <div></div>
+        <aside class="sidebar" id="sidebar">
+            <h6 class="sidebar-title">Módulos del sistema</h6>
+            <ul>
+                <li><a href="index.html" class="active"><i class="bi bi-house-door-fill"></i> Dashboard</a></li>
+                <li><a href="modules/simulador-2d/index.html"><i class="bi bi-controller"></i> Simulador 2D</a></li>
+                <li><a href="modules/entorno-3d/index.html"><i class="bi bi-box-seam"></i> Entorno 3D</a></li>
+                <li><a href="modules/panel-kpis/index.html"><i class="bi bi-graph-up-arrow"></i> Panel KPIs</a></li>
+            </ul>
+        </aside>
+
+        <main class="main-content">
+
+            <!-- ================= COMANDA DE BIENVENIDA ================= -->
+            <section class="comanda">
+                <p class="comanda-folio" id="comandaFolio">Turno · cargando</p>
+
+                <div class="comanda-fila">
+                    <div>
+                        <h1 id="saludo">Bienvenido a la estación</h1>
+                        <p id="subtitulo">
+                            Arma pizzas contra comanda, recorre la cocina y mide cómo vas.
+                            Inicia sesión para que tus turnos queden registrados.
+                        </p>
+
+                        <div class="comanda-acciones">
+                            <a href="modules/simulador-2d/index.html" class="btn-comanda btn-comanda-primario">
+                                <i class="bi bi-play-fill"></i> <span id="ctaTexto">Empezar un turno</span>
+                            </a>
+                            <a href="modules/entorno-3d/index.html" class="btn-comanda btn-comanda-fantasma">
+                                <i class="bi bi-compass"></i> Recorrer la cocina
+                            </a>
+                        </div>
                     </div>
 
-                    <small>
-                        65% completado
-                    </small>
-
+                    <div class="sello">
+                        <p class="rotulo">Dominio de estación</p>
+                        <div class="sello-anillo" id="selloAnillo" style="--pct:0">
+                            <span class="cifra" id="selloPct">—</span>
+                        </div>
+                        <span class="sello-nota" id="selloNota">sin turnos registrados</span>
+                    </div>
                 </div>
+            </section>
+
+            <!-- ================= MÉTRICAS ================= -->
+            <div class="section-header">
+                <h3><i class="bi bi-clipboard-data-fill"></i> Tu desempeño</h3>
+                <a href="modules/panel-kpis/index.html" class="liga">Ver panel completo</a>
+            </div>
+
+            <div class="metricas">
+                <div class="metrica">
+                    <p class="rotulo">Turnos completados</p>
+                    <p class="metrica-valor cifra" id="mTurnos">—</p>
+                    <p class="metrica-pie" id="mTurnosPie">Aún no registras ninguno</p>
+                </div>
+
+                <div class="metrica" data-tono="verde">
+                    <p class="rotulo">Pedidos perfectos</p>
+                    <p class="metrica-valor cifra" id="mPerfectos">—</p>
+                    <p class="metrica-pie">Salen sin errores ni correcciones</p>
+                </div>
+
+                <div class="metrica" data-tono="ambar">
+                    <p class="rotulo">Mejor puntaje</p>
+                    <p class="metrica-valor cifra" id="mPuntaje">—</p>
+                    <p class="metrica-pie">Tu mejor turno hasta hoy</p>
+                </div>
+
+                <div class="metrica" data-tono="rojo">
+                    <p class="rotulo">Armado promedio</p>
+                    <p class="metrica-valor cifra" id="mTiempo">—</p>
+                    <p class="metrica-pie">Tiempo por pizza en la estación</p>
+                </div>
+            </div>
+
+            <!-- ================= MÓDULOS ================= -->
+            <div class="section-header">
+                <h3><i class="bi bi-compass-fill"></i> Módulos de capacitación</h3>
+            </div>
+
+            <div class="cards-grid">
+
+                <a href="modules/simulador-2d/index.html" class="module-card">
+                    <div class="module-card-tapa">
+                        <i class="bi bi-controller module-icono"></i>
+                        <span class="marca" id="marcaSim">Sin empezar</span>
+                    </div>
+                    <h5>Simulador de armado</h5>
+                    <p>Lee la comanda, estira la masa y manda al horno. Ocho pedidos por turno.</p>
+                    <div class="barra"><i id="barraSim"></i></div>
+                    <div class="module-card-pie">
+                        <span id="pieSim">Sin turnos</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </div>
+                </a>
+
+                <a href="modules/entorno-3d/index.html" class="module-card">
+                    <div class="module-card-tapa">
+                        <i class="bi bi-box-seam module-icono"></i>
+                        <span class="marca">Libre</span>
+                    </div>
+                    <h5>Entorno 3D de cocina</h5>
+                    <p>Diez estaciones en el orden real del flujo, del insumo que llega a la pizza que sale.</p>
+                    <div class="barra"><i style="width:100%"></i></div>
+                    <div class="module-card-pie">
+                        <span>Explorar · Recorrido · Reto</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </div>
+                </a>
+
+                <a href="modules/panel-kpis/index.html" class="module-card">
+                    <div class="module-card-tapa">
+                        <i class="bi bi-graph-up-arrow module-icono"></i>
+                        <span class="marca" id="marcaKpi">Sin datos</span>
+                    </div>
+                    <h5>Panel de KPIs</h5>
+                    <p>Tu historial turno por turno: precisión, punto de cocción y tendencia.</p>
+                    <div class="barra"><i id="barraKpi"></i></div>
+                    <div class="module-card-pie">
+                        <span id="pieKpi">Se llena al terminar un turno</span>
+                        <i class="bi bi-arrow-right"></i>
+                    </div>
+                </a>
 
             </div>
 
-        </section>
+        </main>
+    </div>
 
-        <!-- TITULO -->
+    <footer class="footer">
+        © 2026 Domino's Pizza · Prototipo interactivo de capacitación operativa.
+    </footer>
 
-        <div class="section-header">
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+    <script src="js/firebase-init.js"></script>
+    <script src="js/progreso.js"></script>
+    <script src="js/portal.js"></script>
 
-            <h3>
-                <i class="bi bi-compass-fill"></i>
-                ACCESO RÁPIDO A MÓDULOS
-            </h3>
+    <script>
+        /* El dashboard se repinta cada vez que cambia quién está dentro:
+           con sesión muestra cifras reales; sin sesión muestra guiones y
+           explica qué hace falta para llenarlos. */
+        Progreso.alCambiarUsuario(function (usuario) {
+            const r = Progreso.resumen(Progreso.MODULOS.SIM2D);
+            const $ = (id) => document.getElementById(id);
+            const num = (n) => n.toLocaleString("es-MX");
 
-        </div>
+            const hoy = new Date().toLocaleDateString("es-MX",
+                { weekday: "long", day: "numeric", month: "long" });
 
-        <!-- TARJETAS -->
+            if (usuario) {
+                $("saludo").textContent = "Hola, " + usuario.nombre.split(" ")[0];
+                $("comandaFolio").textContent = "Turno · " + hoy;
+                $("subtitulo").textContent = r.hayDatos
+                    ? `Llevas ${r.turnos} ${r.turnos === 1 ? "turno" : "turnos"} y ${r.pedidos} pedidos armados. Sigue practicando para subir tu dominio de estación.`
+                    : "Todavía no tienes turnos registrados. Arma tu primer pedido y el panel empieza a llenarse.";
+                $("ctaTexto").textContent = r.hayDatos ? "Continuar practicando" : "Empezar mi primer turno";
+            } else {
+                $("saludo").textContent = "Bienvenido a la estación";
+                $("comandaFolio").textContent = "Invitado · " + hoy;
+                $("subtitulo").textContent = "Puedes practicar sin cuenta, pero los turnos no se guardan. Inicia sesión para llevar tu progreso.";
+                $("ctaTexto").textContent = "Probar el simulador";
+            }
 
-        <div class="cards-grid">
+            /* ---- Sello de dominio ---- */
+            $("selloAnillo").style.setProperty("--pct", r.hayDatos ? r.dominio : 0);
+            $("selloPct").textContent = r.hayDatos ? r.dominio + "%" : "—";
+            $("selloNota").textContent = !usuario
+                ? "inicia sesión para medirlo"
+                : r.hayDatos
+                    ? `${r.turnos} ${r.turnos === 1 ? "turno" : "turnos"} registrados`
+                    : "sin turnos registrados";
 
-            <a href="modules/simulador-2d/index.html" class="module-card">
-                <i class="bi bi-controller"></i>
-                <h5>
-                    Simulador de Cocina 2D
-                </h5>
-                <p>
-                    Aprende ingredientes y lógica operativa.
-                </p>
-            </a>
+            /* ---- Métricas ---- */
+            $("mTurnos").textContent = r.hayDatos ? r.turnos : "—";
+            $("mTurnosPie").textContent = r.hayDatos ? num(r.pedidos) + " pedidos en total"
+                : "Aún no registras ninguno";
+            $("mPerfectos").innerHTML = r.hayDatos ? r.perfectosPct + "<small>%</small>" : "—";
+            $("mPuntaje").textContent = r.hayDatos ? num(r.mejorPuntaje) : "—";
+            $("mTiempo").innerHTML = r.hayDatos ? r.tiempoProm + "<small>s</small>" : "—";
 
-            <a href="modules/entorno-3d/index.html" class="module-card">
-                <i class="bi bi-box-seam"></i>
-                <h5>
-                    Entorno 3D Interactivo
-                </h5>
-                <p>
-                    Reconoce estaciones y herramientas.
-                </p>
-            </a>
+            /* ---- Estado de cada módulo ---- */
+            const marcaSim = $("marcaSim");
+            marcaSim.textContent = r.hayDatos ? "En curso" : "Sin empezar";
+            marcaSim.dataset.estado = r.hayDatos ? "curso" : "";
+            $("barraSim").style.width = (r.hayDatos ? r.dominio : 0) + "%";
+            $("pieSim").textContent = r.hayDatos
+                ? `${r.turnos} ${r.turnos === 1 ? "turno" : "turnos"} · mejor racha ${r.mejorRacha}`
+                : "Sin turnos";
 
-            <a href="modules/panel-kpis/index.html" class="module-card">
-                <i class="bi bi-graph-up-arrow"></i>
-                <h5>
-                    Panel de KPIs
-                </h5>
-                <p>
-                    Consulta métricas operativas.
-                </p>
-            </a>
-
-        </div>
-
-    </main>
-
-</div>
-
-<!-- FOOTER -->
-
-<footer class="footer">
-    © 2026 Domino's Pizza - Prototipo Interactivo de Evaluación de Layout y Distribución de Botones.
-</footer>
-
-<script src="js/bootstrap.bundle.min.js"></script>
-<script src="js/main.js"></script>
+            const marcaKpi = $("marcaKpi");
+            marcaKpi.textContent = r.hayDatos ? "Con datos" : "Sin datos";
+            marcaKpi.dataset.estado = r.hayDatos ? "activo" : "";
+            $("barraKpi").style.width = (r.hayDatos ? 100 : 0) + "%";
+            $("pieKpi").textContent = r.hayDatos
+                ? "Último turno: " + num(r.ultima.puntos) + " pts"
+                : "Se llena al terminar un turno";
+        });
+    </script>
 
 </body>
+
 </html>

@@ -1,187 +1,305 @@
 <!DOCTYPE html>
 <html lang="es">
-<head>
 
+<head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
-    <title>Panel KPIs</title>
+    <meta name="description" content="Historial de desempeño en la estación de armado: precisión, punto de cocción y tendencia turno por turno.">
+    <title>Panel de KPIs · Domino's System</title>
 
     <link rel="stylesheet" href="../../css/bootstrap.min.css">
-
-    <link rel="stylesheet"
-    href="../../css/bootstrap-icons.min.css">
-
+    <link rel="stylesheet" href="../../css/bootstrap-icons.min.css">
     <link rel="stylesheet" href="../../css/styles.css">
-
 </head>
 
 <body>
 
-<header class="topbar">
-
-    <div class="d-flex align-items-center gap-3">
-
-        <button class="menu-btn" id="menuBtn">
-            <i class="bi bi-list"></i>
-        </button>
-
+    <header class="topbar">
         <div class="d-flex align-items-center gap-3">
+            <button class="menu-btn" id="menuBtn" aria-label="Abrir menú">
+                <i class="bi bi-list"></i>
+            </button>
 
-            <!-- LOGO CLICKEABLE -->
             <a href="../../index.html" class="logo-container">
-
-                <img
-                    src="../../images/logo.png"
-                    alt="Domino's Pizza"
-                    class="logo-dominos">
-
+                <img src="../../images/logo.png" alt="Domino's Pizza" class="logo-dominos" width="42" height="42">
             </a>
 
             <div>
-
-                <h4 class="m-0 fw-bold">
-                    DOMINO'S SYSTEM
-                </h4>
-
-                <small>
-                    Plataforma Unificada de Capacitación
-                </small>
-
+                <h4>DOMINO'S SYSTEM</h4>
+                <small>Plataforma Unificada de Capacitación</small>
             </div>
-
         </div>
 
-    </div>
+        <div class="cuenta">
+            <a href="../../login.html" class="btn-entrar" id="btnEntrar">
+                <i class="bi bi-person-circle"></i> Iniciar sesión
+            </a>
 
-            <!-- Sección Derecha: Botón de Login -->
-    <div>
-        <a href="../../login.html" class="btn btn-primary fw-bold rounded-pill px-4" style="background-color: #006491; border: none;">
-            <i class="bi bi-person-circle me-2"></i> Iniciar Sesión / Registrarse
-        </a>
-    </div>
+            <div class="cuenta-chip oculto" id="chipCuenta">
+                <div>
+                    <span class="cuenta-nombre" id="cuentaNombre">Operador</span>
+                    <span class="cuenta-rol" id="cuentaRol">En sesión</span>
+                </div>
+                <span class="cuenta-inicial" id="cuentaInicial">O</span>
+            </div>
 
+            <button class="btn-salir oculto" id="btnSalir" title="Cerrar sesión" aria-label="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+            </button>
+        </div>
+    </header>
 
-</header>
+    <div class="layout">
 
-<div class="layout">
+        <aside class="sidebar" id="sidebar">
+            <h6 class="sidebar-title">Módulos del sistema</h6>
+            <ul>
+                <li><a href="../../index.html"><i class="bi bi-house-door-fill"></i> Dashboard</a></li>
+                <li><a href="../simulador-2d/index.html"><i class="bi bi-controller"></i> Simulador 2D</a></li>
+                <li><a href="../entorno-3d/index.html"><i class="bi bi-box-seam"></i> Entorno 3D</a></li>
+                <li><a href="#" class="active"><i class="bi bi-graph-up-arrow"></i> Panel KPIs</a></li>
+            </ul>
+        </aside>
 
-    <!-- SIDEBAR -->
+        <main class="main-content">
 
-    <aside class="sidebar" id="sidebar">
+            <section class="module-banner">
+                <div>
+                    <h2>PANEL DE KPIs</h2>
+                    <p id="bannerPie">Tu desempeño en la estación de armado, turno por turno.</p>
+                </div>
+                <div class="module-tag">Desempeño</div>
+            </section>
 
-        <h6 class="sidebar-title">
-            MÓDULOS DEL SISTEMA
-        </h6>
-
-        <ul>
-
-            <li>
-                <a href="../../index.html">
-                    <i class="bi bi-house-door-fill"></i>
-                    Dashboard
-                </a>
-            </li>
-
-            <li>
-                <a href="../simulador-2d/index.html">
-                    <i class="bi bi-controller"></i>
-                    Simulador 2D
-                </a>
-            </li>
-
-            <li>
-                <a href="../entorno-3d/index.html">
-                    <i class="bi bi-box-seam"></i>
-                    Entorno 3D
-                </a>
-            </li>
-
-            <li>
-                <a href="#" class="active">
-                    <i class="bi bi-graph-up-arrow"></i>
-                    Panel KPIs
-                </a>
-            </li>
-
-        </ul>
-
-    </aside>
-
-    <!-- MAIN CONTENT -->
-
-    <main class="main-content">
-
-        <!-- HEADER -->
-
-        <section class="kpi-header">
-
-            <div>
-
-                <h2>
-                    PANEL DE INDICADORES DE RENDIMIENTO (KPIs)
-                </h2>
-
-                <p>
-                    Métricas analíticas basadas en tu sesión actual.
+            <!-- ============ ESTADO VACÍO ============
+                 Se muestra cuando no hay sesión o cuando el usuario todavía no
+                 termina ningún turno. Dice exactamente qué falta. -->
+            <div class="vacio" id="vacio">
+                <i class="bi bi-clipboard-data"></i>
+                <h4 id="vacioTitulo">Aquí verás tu desempeño</h4>
+                <p id="vacioTexto">
+                    Inicia sesión y termina un turno en el simulador para que este panel
+                    se llene con tus datos.
                 </p>
+                <a href="../../login.html" class="btn-comanda btn-comanda-primario" id="vacioAccion">
+                    <i class="bi bi-person-circle"></i> <span id="vacioAccionTexto">Iniciar sesión</span>
+                </a>
+            </div>
+
+            <!-- ============ PANEL CON DATOS ============ -->
+            <div id="panel" class="oculto">
+
+                <div class="kpi-header">
+                    <p class="rotulo m-0" id="kpiRango">Historial completo</p>
+                    <button type="button" class="btn-comanda btn-comanda-fantasma" id="btnBorrar"
+                        style="background:#fff;border-color:var(--borde-fuerte);color:var(--tinta-media)">
+                        <i class="bi bi-trash3"></i> Borrar mi historial
+                    </button>
+                </div>
+
+                <div class="kpi-cards">
+                    <div class="metrica">
+                        <p class="rotulo">Dominio de estación</p>
+                        <p class="metrica-valor cifra" id="kDominio">—</p>
+                        <p class="metrica-pie">Mezcla perfectos, precisión y racha</p>
+                    </div>
+                    <div class="metrica" data-tono="verde">
+                        <p class="rotulo">Pedidos perfectos</p>
+                        <p class="metrica-valor cifra" id="kPerfectos">—</p>
+                        <p class="metrica-pie" id="kPerfectosPie">—</p>
+                    </div>
+                    <div class="metrica" data-tono="ambar">
+                        <p class="rotulo">Precisión de armado</p>
+                        <p class="metrica-valor cifra" id="kPrecision">—</p>
+                        <p class="metrica-pie">Ingredientes correctos por pizza</p>
+                    </div>
+                    <div class="metrica" data-tono="rojo">
+                        <p class="rotulo">Armado promedio</p>
+                        <p class="metrica-valor cifra" id="kTiempo">—</p>
+                        <p class="metrica-pie" id="kTiempoPie">—</p>
+                    </div>
+                </div>
+
+                <div class="kpi-rejilla">
+
+                    <section class="kpi-chart">
+                        <div class="section-header m-0">
+                            <h3><i class="bi bi-bar-chart-line-fill"></i> Puntaje por turno</h3>
+                            <span class="rotulo" id="graficaNota">últimos turnos</span>
+                        </div>
+                        <div class="grafica" id="grafica"></div>
+                    </section>
+
+                    <section class="kpi-chart">
+                        <div class="section-header m-0">
+                            <h3><i class="bi bi-fire"></i> Punto de cocción</h3>
+                        </div>
+                        <ul class="desglose" id="coccion"></ul>
+                    </section>
+
+                </div>
+
+                <section class="kpi-chart" style="margin-top:16px">
+                    <div class="section-header m-0">
+                        <h3><i class="bi bi-list-columns-reverse"></i> Historial de turnos</h3>
+                    </div>
+                    <div style="overflow-x:auto">
+                        <table class="historial">
+                            <thead>
+                                <tr>
+                                    <th>Turno</th>
+                                    <th>Fecha</th>
+                                    <th>Pedidos</th>
+                                    <th>Puntos</th>
+                                    <th>Perfectos</th>
+                                    <th class="col-op">Precisión</th>
+                                    <th class="col-op">Armado</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaTurnos"></tbody>
+                        </table>
+                    </div>
+                </section>
 
             </div>
 
-            <div class="kpi-filter">
-                Filtro: Sesión de Práctica
-            </div>
+        </main>
+    </div>
 
-        </section>
+    <footer class="footer">
+        © 2026 Domino's Pizza · Prototipo interactivo de capacitación operativa.
+    </footer>
 
-        <!-- TARJETAS KPI -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+    <script src="../../js/firebase-init.js"></script>
+    <script src="../../js/progreso.js"></script>
+    <script src="../../js/portal.js"></script>
 
-        <section class="kpi-cards">
+    <script>
+        (function () {
+            const $ = (id) => document.getElementById(id);
+            const num = (n) => Number(n).toLocaleString("es-MX");
 
-            <div class="kpi-card"></div>
+            function pintar(usuario) {
+                const r = Progreso.resumen(Progreso.MODULOS.SIM2D);
+                const conDatos = !!usuario && r.hayDatos;
 
-            <div class="kpi-card"></div>
+                $("vacio").classList.toggle("oculto", conDatos);
+                $("panel").classList.toggle("oculto", !conDatos);
 
-            <div class="kpi-card"></div>
+                /* ---- Estado vacío: dos motivos distintos, dos mensajes ---- */
+                if (!conDatos) {
+                    if (!usuario) {
+                        $("vacioTitulo").textContent = "Aquí verás tu desempeño";
+                        $("vacioTexto").textContent =
+                            "Inicia sesión y termina un turno en el simulador para que este panel se llene con tus datos.";
+                        $("vacioAccion").setAttribute("href", "../../login.html");
+                        $("vacioAccionTexto").textContent = "Iniciar sesión";
+                        $("bannerPie").textContent = "Inicia sesión para consultar tu historial.";
+                    } else {
+                        $("vacioTitulo").textContent = "Todavía no hay turnos";
+                        $("vacioTexto").textContent =
+                            "Termina un turno completo en el simulador de armado y sus resultados aparecen aquí automáticamente.";
+                        $("vacioAccion").setAttribute("href", "../simulador-2d/index.html");
+                        $("vacioAccionTexto").textContent = "Ir al simulador";
+                        $("bannerPie").textContent = "Sin turnos registrados todavía.";
+                    }
+                    return;
+                }
 
-            <div class="kpi-card"></div>
+                /* ---- Encabezado ---- */
+                $("bannerPie").textContent =
+                    `${r.turnos} ${r.turnos === 1 ? "turno" : "turnos"} · ${num(r.pedidos)} pedidos armados`;
+                $("kpiRango").textContent = "Historial de " + usuario.nombre;
 
-            <div class="kpi-card"></div>
+                /* ---- Tarjetas ---- */
+                $("kDominio").innerHTML = r.dominio + "<small>%</small>";
+                $("kPerfectos").innerHTML = r.perfectosPct + "<small>%</small>";
+                $("kPerfectosPie").textContent = "Mejor racha: " + r.mejorRacha + " seguidos";
+                $("kPrecision").innerHTML = r.precision + "<small>%</small>";
+                $("kTiempo").innerHTML = r.tiempoProm + "<small>s</small>";
+                $("kTiempoPie").textContent = "Mejor puntaje: " + num(r.mejorPuntaje);
 
-        </section>
+                /* ---- Gráfica de puntaje por turno ----
+                   Las barras se miden contra el mejor turno, no contra un tope
+                   inventado: así la altura significa "qué tan cerca estuviste de
+                   tu récord". */
+                const tope = Math.max(...r.serie.map(s => s.puntos), 1);
+                $("graficaNota").textContent = r.serie.length + " turnos más recientes";
+                $("grafica").innerHTML = r.serie.map((s, i) => {
+                    const alto = Math.max(6, Math.round((s.puntos / tope) * 100));
+                    const tono = s.perfectosPct >= 75 ? "verde"
+                        : s.perfectosPct >= 40 ? "ambar" : "";
+                    const n = r.turnos - r.serie.length + i + 1;
+                    return `<div class="grafica-col" data-tono="${tono}"
+                                 title="Turno ${n}: ${num(s.puntos)} puntos">
+                                <b>${num(s.puntos)}</b>
+                                <i style="height:${alto}%"></i>
+                                <span>T${n}</span>
+                            </div>`;
+                }).join("");
 
-        <!-- GRAFICA -->
+                /* ---- Punto de cocción, sumando todos los turnos ---- */
+                const coc = { cruda: 0, perfecta: 0, quemada: 0 };
+                Progreso.sesiones(Progreso.MODULOS.SIM2D).forEach(s => {
+                    if (!s.coccion) return;
+                    coc.cruda += s.coccion.cruda || 0;
+                    coc.perfecta += s.coccion.perfecta || 0;
+                    coc.quemada += s.coccion.quemada || 0;
+                });
+                const totalCoc = coc.cruda + coc.perfecta + coc.quemada || 1;
+                const filas = [
+                    { et: "En su punto", n: coc.perfecta, color: "var(--verde)" },
+                    { et: "Cruda", n: coc.cruda, color: "var(--ambar)" },
+                    { et: "Quemada", n: coc.quemada, color: "var(--rojo-hondo)" }
+                ];
+                $("coccion").innerHTML = filas.map(f => `
+                    <li>
+                        <span>${f.et}</span>
+                        <span class="via"><i style="width:${(f.n / totalCoc) * 100}%;background:${f.color}"></i></span>
+                        <span class="cifra">${f.n}</span>
+                    </li>`).join("");
 
-        <section class="kpi-chart">
+                /* ---- Tabla de turnos ---- */
+                const todos = Progreso.sesiones(Progreso.MODULOS.SIM2D);
+                $("tablaTurnos").innerHTML = todos.map((s, i) => {
+                    const f = new Date(s.fecha);
+                    return `<tr>
+                        <td class="folio">T${todos.length - i}</td>
+                        <td>${f.toLocaleDateString("es-MX", { day: "2-digit", month: "short" })}
+                            <span class="folio">${f.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}</span></td>
+                        <td>${s.pedidos}</td>
+                        <td><strong>${num(s.puntos)}</strong></td>
+                        <td>${s.perfectosPct}%</td>
+                        <td class="col-op">${s.precision}%</td>
+                        <td class="col-op">${s.tiempoProm}s</td>
+                    </tr>`;
+                }).join("");
+            }
 
-            <h5>
-                Historial de Tiempos por Comanda
-            </h5>
+            Progreso.alCambiarUsuario(pintar);
 
-            <div class="chart-placeholder">
+            /* El simulador puede estar corriendo en otra pestaña. Cuando
+               guarda un turno, el navegador avisa aquí y el panel se repinta
+               solo, sin que haya que recargar. */
+            window.addEventListener("storage", (e) => {
+                if (e.key && e.key.indexOf("omnitrain:") === 0) pintar(Progreso.usuario());
+            });
 
-                <div class="bar bar-1"></div>
+            // Al volver a esta pestaña también conviene refrescar.
+            document.addEventListener("visibilitychange", () => {
+                if (!document.hidden) pintar(Progreso.usuario());
+            });
 
-                <div class="bar bar-2"></div>
-
-                <div class="bar bar-3"></div>
-
-                <div class="bar bar-4"></div>
-
-            </div>
-
-        </section>
-
-    </main>
-
-</div>
-
-<script src="../../js/bootstrap.bundle.min.js"></script>
-<script src="../../js/main.js"></script>
-
-<footer class="footer">
-    © 2026 Domino's Pizza IP - Prototipo Interactivo de Evaluación de Layout y Distribución de Botones.
-</footer>
+            $("btnBorrar").addEventListener("click", () => {
+                if (!confirm("Se borrará tu historial de turnos en este navegador. Esta acción no se puede deshacer.")) return;
+                Progreso.borrarTodo();
+                pintar(Progreso.usuario());
+            });
+        })();
+    </script>
 
 </body>
+
 </html>
