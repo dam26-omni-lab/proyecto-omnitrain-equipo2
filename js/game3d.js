@@ -238,6 +238,24 @@ let btnPantalla, mira;
 let arrastrando = false;
 let ultimoPuntero = { x: 0, y: 0 };
 let inicioPuntero = { x: 0, y: 0 };
+
+/* ---- Táctil ----------------------------------------------------------------
+   En celular no hay rueda para acercar ni teclado para caminar, así que esas
+   dos cosas del visor simplemente no existían. Estas variables sostienen los
+   dos reemplazos: el pellizco (dos dedos) y la palanca en pantalla.
+
+   Se apoyan en Pointer Events, los mismos que ya usa el visor: un dedo entra
+   como un puntero más, con su pointerId. Por eso el giro y el toque para
+   seleccionar ya funcionaban sin tocar nada; lo que faltaba es lo que necesita
+   DOS dedos o una tecla. */
+
+const punterosActivos = new Map();   // pointerId -> {x, y} de cada dedo apoyado
+let pellizcoDist = 0;                // separación entre dedos al iniciar el gesto
+let pellizcoRadio = 0;               // orbitRadius en ese mismo instante
+let joystick = null;
+
+const esDedo = (e) => e.pointerType === 'touch';
+const enPantallaTactil = () => window.matchMedia('(pointer: coarse)').matches;
 const raycaster = new Raycaster();
 const puntero = new Vector2();
 
@@ -1391,8 +1409,97 @@ function crearControlesVisor() {
     });
     contenedor.appendChild(mira);
 
+    crearJoystick();
+
     document.addEventListener('fullscreenchange', onCambioPantalla);
     document.addEventListener('webkitfullscreenchange', onCambioPantalla);
+}
+
+/* ---- Palanca en pantalla: el reemplazo táctil de W A S D --------------------
+   No mueve la cámara por su cuenta. Lo único que hace es prender y apagar las
+   MISMAS teclas de FP.teclas que ya lee actualizarRecorrido(), así que la
+   colisión, la velocidad y el paso rápido siguen siendo los de siempre: para
+   el resto del código no hay diferencia entre un dedo y un teclado.
+
+   Vive escondida y solo aparece en modo Recorrido sobre pantalla táctil. */
+
+function crearJoystick() {
+    joystick = document.createElement('div');
+    joystick.className = 'joystick-tactil';
+    joystick.setAttribute('aria-hidden', 'true');
+    joystick.hidden = true;
+    joystick.innerHTML = '<span class="joystick-punto"></span>';
+    contenedor.appendChild(joystick);
+
+    const punto = joystick.firstElementChild;
+    let idDedo = null;
+
+    const soltarTeclas = () => {
+        FP.teclas['w'] = FP.teclas['a'] = FP.teclas['s'] = FP.teclas['d'] = false;
+        punto.style.transform = 'translate(-50%, -50%)';
+    };
+
+    const mover = (e) => {
+        const r = joystick.getBoundingClientRect();
+        const cx = r.left + r.width / 2;
+        const cy = r.top + r.height / 2;
+        const max = r.width / 2;
+
+        let dx = e.clientX - cx;
+        let dy = e.clientY - cy;
+
+        // El punto no se sale del aro: si el dedo se va lejos, se recorta al
+        // borde manteniendo la dirección.
+        const largo = Math.hypot(dx, dy);
+        if (largo > max) { dx = (dx / largo) * max; dy = (dy / largo) * max; }
+
+        punto.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+
+        // Zona muerta: sin ella, apoyar el dedo en el centro ya haría caminar.
+        const umbral = max * 0.28;
+        FP.teclas['w'] = dy < -umbral;
+        FP.teclas['s'] = dy > umbral;
+        FP.teclas['a'] = dx < -umbral;
+        FP.teclas['d'] = dx > umbral;
+    };
+
+    joystick.addEventListener('pointerdown', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        idDedo = e.pointerId;
+        try { joystick.setPointerCapture?.(e.pointerId); } catch (_) { /* sin captura igual funciona */ }
+        mover(e);
+    });
+
+    joystick.addEventListener('pointermove', (e) => {
+        if (e.pointerId !== idDedo) return;
+        e.preventDefault();
+        e.stopPropagation();
+        mover(e);
+    });
+
+    const soltar = (e) => {
+        if (e.pointerId !== idDedo) return;
+        idDedo = null;
+        soltarTeclas();
+    };
+
+    joystick.addEventListener('pointerup', soltar);
+    joystick.addEventListener('pointercancel', soltar);
+    joystick.addEventListener('pointerleave', soltar);
+}
+
+function actualizarJoystick() {
+    if (!joystick) return;
+
+    joystick.hidden = !(modo === 'recorrido' && enPantallaTactil());
+
+    // Si se cambia de modo con la palanca inclinada, el punto se quedaría
+    // torcido para la próxima vez. Vuelve al centro.
+    if (joystick.hidden) {
+        const punto = joystick.firstElementChild;
+        if (punto) punto.style.transform = 'translate(-50%, -50%)';
+    }
 }
 
 function alternarPantallaCompleta() {
@@ -1450,11 +1557,19 @@ function raycastCentro() {
 
 function actualizarHint() {
     if (!elHint) return;
-    const textos = {
+
+    // La ayuda tiene que hablar del gesto que la persona sí puede hacer:
+    // decirle "rueda para acercar" a alguien con un teléfono no ayuda.
+    const textos = enPantallaTactil() ? {
+        explorar: 'Arrastra con un dedo para girar · pellizca para acercar · toca una zona para ver su ficha',
+        recorrido: 'Arrastra para mirar alrededor · usa la palanca de la esquina para caminar',
+        reto: 'Lee la pregunta y toca la estación correcta dentro de la cocina'
+    } : {
         explorar: 'Arrastra para girar · rueda para acercar · clic en una zona para ver su ficha',
         recorrido: 'Haz clic para capturar el mouse y mirar libremente · W A S D o flechas para caminar · Esc para soltarlo',
         reto: 'Lee la pregunta y haz clic en la estación correcta dentro de la cocina'
     };
+
     elHint.textContent = textos[modo];
 }
 
@@ -1486,6 +1601,7 @@ function cambiarModo(nuevo) {
 
     if (modo === 'explorar') vistaGeneral();
 
+    actualizarJoystick();
     actualizarHint();
 }
 
@@ -1680,9 +1796,40 @@ function conectarEventos() {
     window.addEventListener('keyup', onKeyUp);
     window.addEventListener('resize', onResize);
     window.addEventListener('blur', () => { FP.teclas = Object.create(null); });
+
+    window.addEventListener('pointercancel', onPointerCancel);
+
+    /* El evento resize de la ventana no alcanza en móvil: el visor mide su
+       alto en dvh, así que también cambia cuando se esconde la barra de
+       direcciones o al girar el teléfono, y ahí el navegador reacomoda el
+       layout DESPUÉS del evento. El observador mira el contenedor de verdad.
+
+       La comparación contra el tamaño ya conocido es obligatoria: sin ella,
+       redimensionar el lienzo dispararía al observador otra vez. */
+
+    if (typeof ResizeObserver !== 'undefined') {
+        new ResizeObserver(() => {
+            if (contenedor.clientWidth !== ancho || contenedor.clientHeight !== alto) {
+                onResize();
+            }
+        }).observe(contenedor);
+    }
 }
 
 function onPointerDown(e) {
+    // Registro de dedos: el segundo abre el gesto de pellizco y cancela el
+    // arrastre, para que separar los dedos no gire la cámara al mismo tiempo.
+    if (esDedo(e)) {
+        punterosActivos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (punterosActivos.size === 2) {
+            arrastrando = false;
+            pellizcoDist = distanciaEntreDedos();
+            pellizcoRadio = orbitRadius;
+            return;
+        }
+        if (punterosActivos.size > 2) return;
+    }
+
     if (modo === 'recorrido') {
         if (punteroBloqueado) {
             // Ya con el mouse capturado, el clic selecciona lo que marca la mira.
@@ -1692,7 +1839,9 @@ function onPointerDown(e) {
         }
         // Primer clic dentro del visor: capturamos el mouse. Seguimos armando
         // el arrastre como respaldo por si el navegador no concede la captura.
-        pedirBloqueoPuntero();
+        // Con el dedo no se pide: Pointer Lock es un concepto de ratón y en
+        // móvil o lo niega el navegador o deja la pantalla en un estado raro.
+        if (!esDedo(e)) pedirBloqueoPuntero();
     }
 
     arrastrando = true;
@@ -1703,6 +1852,15 @@ function onPointerDown(e) {
 }
 
 function onPointerMove(e) {
+    // Con dos dedos apoyados el movimiento es pellizco, no giro.
+    if (esDedo(e) && punterosActivos.has(e.pointerId)) {
+        punterosActivos.set(e.pointerId, { x: e.clientX, y: e.clientY });
+        if (punterosActivos.size >= 2) {
+            aplicarPellizco();
+            return;
+        }
+    }
+
     // Con el mouse capturado no hay cursor ni bordes: giramos con el
     // desplazamiento crudo del ratón, sin importar si hay botón apretado.
     if (punteroBloqueado) {
@@ -1729,6 +1887,18 @@ function onPointerMove(e) {
 }
 
 function onPointerUp(e) {
+    // Al levantar un dedo del pellizco no se selecciona nada: el gesto era
+    // acercar, no tocar una estación.
+    if (esDedo(e)) {
+        const eraPellizco = punterosActivos.size >= 2;
+        punterosActivos.delete(e.pointerId);
+        if (eraPellizco) {
+            arrastrando = false;
+            pellizcoDist = 0;
+            return;
+        }
+    }
+
     // Con el mouse capturado la selección ya la hizo onPointerDown con la mira.
     if (punteroBloqueado) { arrastrando = false; return; }
     if (!arrastrando) return;
@@ -1748,6 +1918,42 @@ function onWheel(e) {
     if (modo === 'recorrido') return;
     e.preventDefault();
     orbitRadius = clamp(orbitRadius + e.deltaY * 0.0035 * Math.max(orbitRadius * 0.5, 1), RADIO_MIN, RADIO_MAX);
+}
+
+/* ---- Pellizco: el reemplazo táctil de la rueda -----------------------------
+   Se compara la separación actual de los dedos contra la que tenían al
+   empezar, y esa razón se aplica sobre el radio de órbita de ese momento.
+   Medirlo contra el inicio del gesto y no contra el fotograma anterior es lo
+   que evita que el zoom se vaya acumulando y quede a la deriva. */
+
+function distanciaEntreDedos() {
+    const dedos = [...punterosActivos.values()];
+    if (dedos.length < 2) return 0;
+    return Math.hypot(dedos[0].x - dedos[1].x, dedos[0].y - dedos[1].y);
+}
+
+function aplicarPellizco() {
+    // En recorrido la cámara va pegada a la persona: acercar no significa nada.
+    if (modo === 'recorrido' || !pellizcoDist) return;
+
+    const d = distanciaEntreDedos();
+    if (!d) return;
+
+    // Dedos que se separan → razón < 1 → radio menor → la cámara se acerca.
+    orbitRadius = clamp(pellizcoRadio * (pellizcoDist / d), RADIO_MIN, RADIO_MAX);
+
+    // Si había una animación de cámara en curso, el gesto manda.
+    camAnim = null;
+}
+
+/* Si el navegador se queda con el gesto (una llamada entrante, el gesto de
+   volver atrás), no llega el pointerup y el dedo quedaría apoyado para
+   siempre. Esto lo suelta. */
+
+function onPointerCancel(e) {
+    punterosActivos.delete(e.pointerId);
+    if (punterosActivos.size < 2) pellizcoDist = 0;
+    arrastrando = false;
 }
 
 function onKeyDown(e) {
