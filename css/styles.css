@@ -52,6 +52,15 @@
     --display: "Arial Black", "Segoe UI Black", Impact, sans-serif;
     --body: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
     --ticket: "Courier New", Courier, monospace;
+
+    /* MEDIDAS DEL ARMAZÓN
+       Antes la altura de la barra (68px) y el respiro del contenido (24px)
+       estaban escritos a mano en cinco reglas distintas. Al pasarlos a
+       variables, cambiar el alto de la barra en móvil recoloca solo el menú
+       lateral, el alto mínimo del layout y los escenarios a pantalla completa,
+       sin tener que tocar cada regla por separado. */
+    --topbar-h: 68px;
+    --pad-main: 24px;
 }
 
 /* ---------------------------------------------------------------------------
@@ -91,7 +100,7 @@ body {
 --------------------------------------------------------------------------- */
 
 .topbar {
-    height: 68px;
+    height: var(--topbar-h);
     background: var(--azul-hondo);
     border-bottom: 3px solid var(--rojo);
     display: flex;
@@ -218,7 +227,7 @@ body {
 
 .layout {
     display: flex;
-    min-height: calc(100vh - 68px);
+    min-height: calc(100vh - var(--topbar-h));
 }
 
 .sidebar {
@@ -303,7 +312,7 @@ body {
 .main-content {
     flex: 1;
     min-width: 0;
-    padding: 24px;
+    padding: var(--pad-main);
 }
 
 /* ---------------------------------------------------------------------------
@@ -987,9 +996,9 @@ body {
     .sidebar {
         position: fixed;
         left: -100%;
-        top: 68px;
+        top: var(--topbar-h);
         width: 250px;
-        height: calc(100% - 68px);
+        height: calc(100% - var(--topbar-h));
         z-index: 999;
         box-shadow: var(--sombra-alta);
         overflow-y: auto;
@@ -999,7 +1008,7 @@ body {
 
     .layout { flex-direction: column; }
 
-    .main-content { padding: 18px; }
+    :root { --pad-main: 18px; }
 
     .comanda-fila { flex-direction: column; align-items: stretch; }
 
@@ -1012,7 +1021,8 @@ body {
     .cuenta-nombre, .cuenta-rol { display: none; }
     .cuenta-chip { padding: 4px; }
 
-    .main-content { padding: 14px; }
+    :root { --pad-main: 14px; }
+
     .comanda { padding: 26px 20px 24px; }
     .module-banner { flex-direction: column; align-items: flex-start; }
     .grafica { height: 170px; }
@@ -1662,3 +1672,441 @@ body {
         .btn-dominos:hover {
             background-color: #005073;
         }
+
+/* ===================================================================
+   RESPONSIVIDAD MÓVIL
+   -------------------------------------------------------------------
+   Bloque agregado al final a propósito: solo suma reglas, no reescribe
+   ninguna de las de arriba ni toca la lógica de los módulos.
+
+   Qué resuelve, en orden de importancia:
+
+     1. TOQUE. Sin `touch-action: none` el navegador se queda con el
+        gesto: arrastras un ingrediente y en vez de moverlo, la página
+        hace scroll. El mismo problema mata el giro de cámara del 3D.
+        Es LA corrección que hace usables los dos escenarios en celular.
+
+     2. ALTURA REAL. En móvil `100vh` incluye la barra de direcciones,
+        así que el escenario queda cortado por debajo. Se usa `100dvh`
+        cuando el navegador lo soporta, con `100vh` de respaldo.
+
+     3. APROVECHAR LA PANTALLA. En vertical el lienzo llega de borde a
+        borde; en horizontal se dimensiona por la altura de la ventana
+        para que ocupe todo lo disponible.
+
+   Sobre el lienzo 2D: su alto sigue saliendo del ancho (aspect-ratio) o
+   del alto de la ventana (dvh). Nunca del canvas. Eso es lo que evita
+   el crecimiento descontrolado que documenta la sección del simulador.
+=================================================================== */
+
+/* -------------------------------------------------------------------
+   1 · BASE
+------------------------------------------------------------------- */
+
+html {
+    /* iOS agranda por su cuenta el texto de los bloques angostos al
+       girar el teléfono. Esto se lo impide. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    /* El destello gris del toque en iOS/Android sobra: los enlaces y
+       botones ya tienen su propio estado. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Ninguna imagen desborda su columna en pantallas angostas */
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* -------------------------------------------------------------------
+   2 · SUPERFICIES TÁCTILES DE LOS ESCENARIOS
+   Vale tanto para Phaser como para Three.js: dentro del lienzo el
+   gesto es del juego, no del navegador.
+------------------------------------------------------------------- */
+
+#game-container,
+#game-container canvas,
+#scene-container,
+#scene-container canvas {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Y que el rebote del scroll no se propague a la página al llegar al
+   borde del escenario. */
+#game-container,
+#scene-container {
+    overscroll-behavior: contain;
+}
+
+#scene-container canvas {
+    max-width: 100%;
+}
+
+/* -------------------------------------------------------------------
+   3 · AVISO DE GIRAR EL TELÉFONO
+   Oculto siempre; solo aparece en pantallas chicas en vertical, que es
+   donde el escenario queda a menos de la mitad de su tamaño útil.
+------------------------------------------------------------------- */
+
+.aviso-girar {
+    display: none;
+}
+
+@media (max-width: 860px) and (orientation: portrait) {
+
+    .aviso-girar {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+
+        margin: 0 0 12px;
+        padding: 10px 14px;
+
+        background: #fff8e6;
+        border: 1px solid #ffe4a3;
+        border-radius: var(--r-chico);
+
+        font-size: .8rem;
+        line-height: 1.35;
+        color: #8a6d1a;
+    }
+
+    .aviso-girar i {
+        flex: none;
+        font-size: 1.1rem;
+        color: #e3a23b;
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   4 · BARRA SUPERIOR Y MENÚ EN PANTALLAS CHICAS
+------------------------------------------------------------------- */
+
+@media (max-width: 480px) {
+
+    /* La barra baja de 68 a 58 px. Como el menú lateral y los
+       escenarios a pantalla completa se miden con esta variable, todo
+       se recoloca solo. */
+    :root { --topbar-h: 58px; }
+
+    .topbar { gap: 10px; }
+    .topbar h4 { font-size: .92rem; }
+
+    .logo-dominos { height: 34px; }
+
+    .btn-entrar {
+        padding: 9px 14px;
+        font-size: .8rem;
+    }
+
+}
+
+/* Dedo, no cursor: los blancos de toque suben a 44 px, que es el
+   mínimo cómodo en pantalla táctil. */
+@media (pointer: coarse) {
+
+    .menu-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .btn-salir {
+        width: 42px;
+        height: 42px;
+    }
+
+    .sidebar ul li a {
+        padding: 14px;
+    }
+
+    .station-item {
+        padding: 13px 14px;
+    }
+
+    .mode-chip {
+        padding: 10px 15px;
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   5 · SIMULADOR 2D
+------------------------------------------------------------------- */
+
+/* --- Vertical: el lienzo se lleva todo el ancho de la ventana ---
+   Los márgenes negativos cancelan el respiro lateral del contenido,
+   así el canvas gana los 28 px que se comía el padding. */
+
+@media (max-width: 860px) and (orientation: portrait) {
+
+    .simulator-stage {
+        margin-left: calc(var(--pad-main) * -1);
+        margin-right: calc(var(--pad-main) * -1);
+    }
+
+    #game-container {
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+}
+
+/* --- Horizontal en celular: el lienzo se mide por la altura ---
+   `pointer: coarse` limita esto a pantallas táctiles: una laptop de
+   ventana baja no debe entrar aquí. */
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+
+    /* La barra deja de ser pegajosa para no comerse altura útil. */
+    .topbar { position: static; }
+
+    .module-banner--slim,
+    .aviso-girar,
+    .footer { display: none; }
+
+    .simulator-stage {
+        margin-left: calc(var(--pad-main) * -1);
+        margin-right: calc(var(--pad-main) * -1);
+    }
+
+    #game-container {
+        /* El ancho sale del aspect-ratio ya definido arriba; el alto,
+           de la ventana. En ningún caso del canvas. */
+        width: auto;
+        max-width: 100%;
+        height: calc(100vh - var(--topbar-h) - (var(--pad-main) * 2));
+
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    @supports (height: 100dvh) {
+        #game-container {
+            height: calc(100dvh - var(--topbar-h) - (var(--pad-main) * 2));
+        }
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   6 · ENTORNO 3D
+------------------------------------------------------------------- */
+
+@media (max-width: 991px) {
+
+    /* El visor deja de exigir 640 px fijos y pasa a medirse contra la
+       ventana. Con `flex: none` la altura la manda esta regla, no el
+       reparto del flex. */
+    .viewer-panel {
+        min-height: 0;
+    }
+
+    #scene-container {
+        flex: none;
+        height: 56vh;
+        min-height: 280px;
+        max-height: 460px;
+    }
+
+    @supports (height: 100dvh) {
+        #scene-container { height: 56dvh; }
+    }
+
+    /* Deliberadamente NO ocupa toda la pantalla: como dentro del visor
+       el gesto es del 3D, hace falta dejar página arriba y abajo para
+       que el usuario pueda seguir haciendo scroll. */
+
+    .viewer-footer {
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: .74rem;
+    }
+
+    /* Diez estaciones sin tope convierten la página en una lista
+       interminable. Con este alto vuelve a ser una lista que se
+       desplaza dentro de su tarjeta. */
+    .station-list {
+        max-height: 46vh;
+    }
+
+}
+
+@media (max-width: 640px) {
+
+    /* Los tres modos caben en fila desplazable en vez de amontonarse */
+    .mode-bar {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .mode-bar::-webkit-scrollbar { display: none; }
+
+    .mode-chip { flex: none; }
+
+    .stations-panel { padding: 16px; }
+
+    .minimapa {
+        width: 112px;
+    }
+
+}
+
+/* Horizontal en celular: el visor se estira a lo que dé la ventana,
+   descontando barra de modos y pie del visor. */
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+
+    .module-banner,
+    .aviso-girar { display: none; }
+
+    #scene-container {
+        height: calc(100vh - var(--topbar-h) - 140px);
+        min-height: 220px;
+        max-height: none;
+    }
+
+    @supports (height: 100dvh) {
+        #scene-container {
+            height: calc(100dvh - var(--topbar-h) - 140px);
+        }
+    }
+
+    .minimapa {
+        width: 96px;
+        left: 8px;
+        bottom: 8px;
+    }
+
+}
+
+/* El botón de pantalla completa lo crea game3d.js con estilos en línea,
+   así que solo se le puede ganar con !important. En táctil sube a 44 px
+   para que se pueda tocar sin apuntar. */
+
+@media (pointer: coarse) {
+
+    #scene-container > button {
+        width: 44px !important;
+        height: 44px !important;
+        top: 10px !important;
+        right: 10px !important;
+        font-size: 17px !important;
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   7 · DASHBOARD, KPIs Y LOGIN
+------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+
+    .section-header {
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 24px 0 12px;
+    }
+
+    .comanda-acciones .btn-comanda {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+    /* Con muchos turnos las columnas se apretaban hasta desaparecer */
+    .grafica { gap: 6px; }
+    .grafica-col > i { max-width: 30px; }
+
+    .kpi-header { gap: 10px; }
+
+    .login-wrapper { padding: 20px 14px; }
+    .login-card { padding: 1.5rem; }
+
+}
+
+@media (max-width: 380px) {
+
+    /* El rótulo del valor encima de cada barra ya no cabe */
+    .grafica-col b { display: none; }
+
+}
+
+
+/* ===================================================================
+   PALANCA TÁCTIL DEL ENTORNO 3D
+   -------------------------------------------------------------------
+   La crea game3d.js dentro de #scene-container y solo la muestra en
+   modo Recorrido sobre pantalla táctil. Va abajo a la derecha porque
+   el minimapa ocupa la esquina izquierda y el botón de pantalla
+   completa la de arriba.
+=================================================================== */
+
+.joystick-tactil {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 5;
+
+    width: 116px;
+    height: 116px;
+    border-radius: 50%;
+
+    background: rgba(0, 34, 68, .42);
+    border: 1px solid rgba(255, 255, 255, .28);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+
+    /* Sin esto el navegador se lleva el gesto y la palanca no responde */
+    touch-action: none;
+}
+
+/* Obligatorio: cualquier display anularía el atributo hidden con el que
+   game3d.js la esconde fuera del modo Recorrido. */
+
+.joystick-tactil[hidden] {
+    display: none;
+}
+
+.joystick-punto {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+
+    background: rgba(255, 255, 255, .88);
+    border: 1px solid rgba(0, 0, 0, .18);
+
+    transform: translate(-50%, -50%);
+
+    /* El dedo apunta al aro, no al punto: si el punto capturara el toque,
+       el arrastre se cortaría en cuanto el punto se moviera. */
+    pointer-events: none;
+}
+
+/* En horizontal la pantalla es baja: la palanca se achica para no
+   taparle media cocina al usuario. */
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+
+    .joystick-tactil {
+        width: 92px;
+        height: 92px;
+        right: 12px;
+        bottom: 12px;
+    }
+
+    .joystick-punto {
+        width: 38px;
+        height: 38px;
+    }
+
+}
