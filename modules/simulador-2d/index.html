@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Simulador 2D</title>
+
+    <link rel="stylesheet" href="../../css/bootstrap.min.css">
+
+    <link rel="stylesheet" href="../../css/bootstrap-icons.min.css">
+
+    <link rel="stylesheet" href="../../css/styles.css">
+
+</head>
+
+<body>
+
+    <header class="topbar">
+        <div class="d-flex align-items-center gap-3">
+            <button class="menu-btn" id="menuBtn" aria-label="Abrir menú">
+                <i class="bi bi-list"></i>
+            </button>
+
+            <a href="../../index.html" class="logo-container">
+                <img src="../../images/logo.png" alt="Domino's Pizza" class="logo-dominos" width="42" height="42">
+            </a>
+
+            <div>
+                <h4>DOMINO'S SYSTEM</h4>
+                <small>Plataforma Unificada de Capacitación</small>
+            </div>
+        </div>
+
+        <div class="cuenta">
+            <a href="../../login.html" class="btn-entrar" id="btnEntrar">
+                <i class="bi bi-person-circle"></i> Iniciar sesión
+            </a>
+
+            <div class="cuenta-chip oculto" id="chipCuenta">
+                <div>
+                    <span class="cuenta-nombre" id="cuentaNombre">Operador</span>
+                    <span class="cuenta-rol" id="cuentaRol">En sesión</span>
+                </div>
+                <span class="cuenta-inicial" id="cuentaInicial">O</span>
+            </div>
+
+            <button class="btn-salir oculto" id="btnSalir" title="Cerrar sesión" aria-label="Cerrar sesión">
+                <i class="bi bi-box-arrow-right"></i>
+            </button>
+        </div>
+    </header>
+
+<div class="layout">
+
+    <!-- SIDEBAR -->
+
+            <aside class="sidebar" id="sidebar">
+            <h6 class="sidebar-title">Módulos del sistema</h6>
+            <ul>
+                <li><a href="../../index.html"><i class="bi bi-house-door-fill"></i> Dashboard</a></li>
+                <li><a href="#" class="active"><i class="bi bi-controller"></i> Simulador 2D</a></li>
+                <li><a href="../entorno-3d/index.html"><i class="bi bi-box-seam"></i> Entorno 3D</a></li>
+                <li><a href="../panel-kpis/index.html"><i class="bi bi-graph-up-arrow"></i> Panel KPIs</a></li>
+            </ul>
+        </aside>
+
+    <!-- MAIN -->
+
+    <main class="main-content">
+
+        <!--
+            BANNER
+
+            Los marcadores (puntaje, racha, tiempo) ya no viven aquí: el juego
+            los dibuja en su propia barra superior, dentro del canvas. Tenerlos
+            en dos lugares duplicaba la misma información.
+        -->
+
+        <section class="module-banner module-banner--slim">
+
+            <div>
+
+                <h2>
+                    MÓDULO DE APRENDIZAJE 2D
+                </h2>
+
+                <p>
+                    Simulador de operaciones y armado de pizzas
+                </p>
+
+            </div>
+
+            <div class="module-hint">
+                <i class="bi bi-mouse"></i>
+                Arrastra los ingredientes · teclas 1-8 · espacio para hornear
+            </div>
+
+        </section>
+
+        <!--
+            ESCENARIO DEL SIMULADOR
+
+            Un solo contenedor, sin tarjeta ni paneles laterales. La comanda,
+            el avance y el procedimiento se dibujan dentro del canvas, así el
+            texto se renderiza a resolución nativa en lugar de depender de
+            contenedores HTML que lo reescalan.
+        -->
+
+        <!--
+            AVISO DE GIRAR EL TELÉFONO
+
+            Solo se ve en pantallas chicas en vertical (lo controla el CSS,
+            no hay JavaScript detrás). En vertical el lienzo mide poco más de
+            un tercio de su tamaño útil; en horizontal se aprovecha entero.
+        -->
+
+        <p class="aviso-girar">
+            <i class="bi bi-phone-flip"></i>
+            Gira el teléfono: en horizontal el simulador ocupa toda la pantalla
+            y los ingredientes se ven mucho más grandes.
+        </p>
+
+        <div class="simulator-stage">
+
+            <div id="game-container"></div>
+
+        </div>
+
+    </main>
+
+</div>
+
+<footer class="footer">
+    © 2026 Domino's Pizza · Prototipo interactivo de capacitación operativa.
+</footer>
+
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+<script src="../../js/firebase-init.js"></script>
+<script src="../../js/progreso.js"></script>
+<script src="../../js/portal.js"></script>
+<script src="../../js/phaser.min.js"></script>
+<script src="../../js/game.js"></script>
+
+</body>
+</html>

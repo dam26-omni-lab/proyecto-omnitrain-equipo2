@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acceso - Domino's System</title>
+
+    <!-- BOOTSTRAP -->
+    <link rel="stylesheet" href="css/bootstrap.min.css">
+
+    <!-- BOOTSTRAP ICONS -->
+    <link rel="stylesheet" href="css/bootstrap-icons.min.css">
+
+    <!-- CSS -->
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+
+<body>
+
+    <div class="login-wrapper">
+        <div class="login-card">
+
+            <div class="text-center mb-4">
+                <img src="images/logo.png" alt="Domino's Pizza" style="width: 70px; margin-bottom: 15px;">
+                <h4 class="fw-bold" style="color: #006491;">Domino's System</h4>
+                <p class="text-muted small">Acceso a rutas de capacitación</p>
+            </div>
+
+            <!-- Formulario -->
+            <form id="loginForm" class="needs-validation" novalidate>
+
+                <!-- Perfil de acceso -->
+                <div class="mb-3">
+                    <label for="role" class="form-label fw-semibold">Perfil de acceso</label>
+                    <select id="role" name="role" class="form-select" required>
+                        <option value="" selected disabled>Selecciona un rol</option>
+                        <option value="administrador">Administrador (Asigna módulos y tareas)</option>
+                        <option value="capacitado">Capacitado (Realiza módulos asignados)</option>
+                    </select>
+                    <div class="invalid-feedback">
+                        Por favor, selecciona un rol obligatorio para continuar.
+                    </div>
+                </div>
+
+                <!-- Correo -->
+                <div class="mb-3">
+                    <label for="email" class="form-label fw-semibold">Correo corporativo</label>
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        class="form-control"
+                        placeholder="nombre.apellido@empresa.com"
+                        required
+                    >
+                    <div class="invalid-feedback">
+                        Ingresa un correo válido.
+                    </div>
+                </div>
+
+                <!-- Contraseña -->
+                <div class="mb-3">
+                    <label for="password" class="form-label fw-semibold">Contraseña</label>
+                    <input
+                        type="password"
+                        id="password"
+                        name="password"
+                        class="form-control"
+                        minlength="8"
+                        required
+                    >
+                    <div class="invalid-feedback">
+                        La contraseña debe tener al menos 8 caracteres.
+                    </div>
+                </div>
+
+                <!-- Mensajes -->
+                <div id="loginFeedback" class="text-center text-danger mb-3"></div>
+
+                <!-- Botón -->
+                <button
+                    type="submit"
+                    class="btn btn-primary w-100 fw-bold py-2 mt-3 btn-dominos"
+                    id="loginButton">
+                    Acceder a Domino's System
+                </button>
+
+                <div class="mt-3 text-center">
+                    <a href="index.html" class="text-decoration-none small text-muted">
+                        <i class="bi bi-arrow-left"></i> Volver al Dashboard
+                    </a>
+                </div>
+
+            </form>
+
+        </div>
+    </div>
+
+    <!-- Firebase -->
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.13.2/firebase-auth-compat.js"></script>
+
+    <!-- Tu JS -->
+    <script src="js/login.js"></script>
+
+</body>
+</html>

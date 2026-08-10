@@ -1,0 +1,2112 @@
+/* ============================================================================
+   DOMINO'S SYSTEM — PORTAL
+   ----------------------------------------------------------------------------
+   Rediseño de la cáscara del sitio: barra, menú, dashboard, tarjetas de módulo
+   y Panel de KPIs. No toca el lienzo del Simulador 2D ni la escena del
+   Entorno 3D; solo el marco que los rodea.
+
+   DE DÓNDE SALE EL ESTILO
+   La cocina ya tiene un lenguaje visual: la comanda impresa. Papel, tipografía
+   monoespaciada, perforación y números tabulares. El portal lo toma prestado
+   para las cifras y los datos, de modo que el dashboard y el simulador se
+   sientan del mismo sistema en vez de dos productos pegados.
+
+   TRES ROLES TIPOGRÁFICOS, los mismos que usa el juego:
+     display → Arial Black    títulos y cifras grandes
+     body    → Trebuchet MS   texto corrido e interfaz
+     ticket  → Courier New    datos, folios, marcadores
+============================================================================ */
+
+:root {
+    /* Marca */
+    --azul: #0077b6;
+    --azul-hondo: #002244;
+    --azul-tinta: #041c3c;
+    --rojo: #e31837;
+    --rojo-hondo: #9e1128;
+
+    /* Señales de estado */
+    --verde: #13b97d;
+    --ambar: #f0a020;
+
+    /* Superficies */
+    --papel: #f4f6f9;
+    --lienzo: #eef1f6;
+    --tarjeta: #ffffff;
+    --borde: #e2e7ee;
+    --borde-fuerte: #cfd8e4;
+
+    /* Texto */
+    --tinta: #12233c;
+    --tinta-media: #5b6b80;
+    --tinta-suave: #8194aa;
+
+    --sombra-sutil: 0 1px 2px rgba(4, 28, 60, .06);
+    --sombra-carta: 0 6px 22px rgba(4, 28, 60, .09);
+    --sombra-alta: 0 16px 44px rgba(4, 28, 60, .16);
+
+    --r-chico: 10px;
+    --r-medio: 14px;
+    --r-grande: 20px;
+
+    --display: "Arial Black", "Segoe UI Black", Impact, sans-serif;
+    --body: "Trebuchet MS", "Segoe UI", Arial, sans-serif;
+    --ticket: "Courier New", Courier, monospace;
+
+    /* MEDIDAS DEL ARMAZÓN
+       Antes la altura de la barra (68px) y el respiro del contenido (24px)
+       estaban escritos a mano en cinco reglas distintas. Al pasarlos a
+       variables, cambiar el alto de la barra en móvil recoloca solo el menú
+       lateral, el alto mínimo del layout y los escenarios a pantalla completa,
+       sin tener que tocar cada regla por separado. */
+    --topbar-h: 68px;
+    --pad-main: 24px;
+}
+
+/* ---------------------------------------------------------------------------
+   BASE
+--------------------------------------------------------------------------- */
+
+body {
+    font-family: var(--body);
+    background: var(--lienzo);
+    color: var(--tinta);
+    -webkit-font-smoothing: antialiased;
+}
+
+/* Toda cifra usa cifras de ancho fijo: así las columnas no bailan al
+   actualizarse un marcador. */
+.cifra {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1;
+}
+
+.rotulo {
+    font-size: .68rem;
+    font-weight: 700;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--tinta-suave);
+}
+
+:where(a, button, input, select, [tabindex]):focus-visible {
+    outline: 2px solid var(--azul);
+    outline-offset: 2px;
+    border-radius: 6px;
+}
+
+/* ---------------------------------------------------------------------------
+   BARRA SUPERIOR
+--------------------------------------------------------------------------- */
+
+.topbar {
+    height: var(--topbar-h);
+    background: var(--azul-hondo);
+    border-bottom: 3px solid var(--rojo);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 0 22px;
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+    color: #fff;
+}
+
+.topbar h4 {
+    font-family: var(--display);
+    font-size: 1.02rem;
+    letter-spacing: .04em;
+    margin: 0;
+}
+
+.topbar small {
+    color: #9fb6cc;
+    font-size: .74rem;
+}
+
+.menu-btn {
+    border: none;
+    background: rgba(255, 255, 255, .08);
+    border-radius: 9px;
+    width: 38px;
+    height: 38px;
+    font-size: 20px;
+    display: none;
+    color: #fff;
+    cursor: pointer;
+}
+
+/* ---- Identidad de quien está dentro ---- */
+
+.cuenta {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cuenta-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255, 255, 255, .09);
+    border: 1px solid rgba(255, 255, 255, .16);
+    border-radius: 999px;
+    padding: 5px 6px 5px 14px;
+    color: #fff;
+}
+
+.cuenta-nombre {
+    display: block;
+    font-size: .82rem;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.cuenta-rol {
+    display: block;
+    font-size: .66rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: #9fb6cc;
+}
+
+.cuenta-inicial {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--rojo);
+    color: #fff;
+    font-family: var(--display);
+    font-size: .84rem;
+    display: grid;
+    place-items: center;
+}
+
+.btn-salir {
+    border: 1px solid rgba(255, 255, 255, .22);
+    background: transparent;
+    color: #cfe0ee;
+    border-radius: 9px;
+    width: 36px;
+    height: 36px;
+    cursor: pointer;
+    transition: background .18s, color .18s;
+}
+
+.btn-salir:hover {
+    background: var(--rojo);
+    border-color: var(--rojo);
+    color: #fff;
+}
+
+.btn-entrar {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: var(--azul);
+    color: #fff;
+    font-weight: 700;
+    font-size: .86rem;
+    text-decoration: none;
+    border-radius: 999px;
+    padding: 10px 20px;
+    transition: background .18s, transform .18s;
+}
+
+.btn-entrar:hover {
+    background: #0090dc;
+    color: #fff;
+    transform: translateY(-1px);
+}
+
+/* ---------------------------------------------------------------------------
+   ESTRUCTURA Y MENÚ LATERAL
+--------------------------------------------------------------------------- */
+
+.layout {
+    display: flex;
+    min-height: calc(100vh - var(--topbar-h));
+}
+
+.sidebar {
+    width: 246px;
+    flex: none;
+    background: var(--tarjeta);
+    border-right: 1px solid var(--borde);
+    padding: 22px 16px;
+    transition: left .28s ease;
+}
+
+.sidebar-title {
+    font-size: .66rem;
+    font-weight: 800;
+    letter-spacing: .16em;
+    text-transform: uppercase;
+    color: var(--tinta-suave);
+    padding: 0 10px;
+    margin-bottom: 12px;
+}
+
+.sidebar ul {
+    list-style: none;
+    padding-left: 0;
+    margin: 0;
+}
+
+.sidebar ul li {
+    margin-bottom: 4px;
+}
+
+.sidebar ul li a {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    text-decoration: none;
+    color: var(--tinta-media);
+    padding: 12px 14px;
+    border-radius: var(--r-chico);
+    font-weight: 600;
+    font-size: .9rem;
+    transition: background .18s, color .18s;
+}
+
+.sidebar ul li a i {
+    font-size: 1.05rem;
+    color: var(--tinta-suave);
+    transition: color .18s;
+}
+
+.sidebar ul li a:hover {
+    background: #f1f5fa;
+    color: var(--tinta);
+}
+
+.sidebar ul li a:hover i {
+    color: var(--azul);
+}
+
+/* La barra roja marca dónde estás: es la misma señal de la barra superior. */
+.sidebar ul li a.active {
+    background: #eaf3fa;
+    color: var(--azul-hondo);
+}
+
+.sidebar ul li a.active i {
+    color: var(--azul);
+}
+
+.sidebar ul li a.active::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 9px;
+    bottom: 9px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--rojo);
+}
+
+.main-content {
+    flex: 1;
+    min-width: 0;
+    padding: var(--pad-main);
+}
+
+/* ---------------------------------------------------------------------------
+   COMANDA DE BIENVENIDA
+   El encabezado del dashboard es un ticket de cocina: perforación arriba,
+   folio en monoespaciada y el avance como sello. Es el elemento que le da
+   carácter a la página, así que lo de alrededor se mantiene sobrio.
+--------------------------------------------------------------------------- */
+
+.comanda {
+    position: relative;
+    background: linear-gradient(150deg, #04305c 0%, var(--azul-hondo) 55%, #011a34 100%);
+    color: #fff;
+    border-radius: var(--r-grande);
+    padding: 30px 32px 32px;
+    margin-bottom: 26px;
+    overflow: hidden;
+    box-shadow: var(--sombra-alta);
+}
+
+/* Perforación de papel: puntos calados en el borde superior. */
+.comanda::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 12px;
+    background:
+        radial-gradient(circle at 9px 0, var(--lienzo) 5px, transparent 5.5px) repeat-x;
+    background-size: 18px 12px;
+}
+
+.comanda::after {
+    content: "";
+    position: absolute;
+    right: -70px;
+    top: -70px;
+    width: 260px;
+    height: 260px;
+    border: 30px solid rgba(227, 24, 55, .16);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.comanda-fila {
+    position: relative;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 28px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+
+.comanda-folio {
+    font-family: var(--ticket);
+    font-size: .74rem;
+    letter-spacing: .12em;
+    color: #7fa9cf;
+    text-transform: uppercase;
+}
+
+.comanda h1 {
+    font-family: var(--display);
+    font-size: clamp(1.7rem, 3.4vw, 2.5rem);
+    line-height: 1.05;
+    margin: 6px 0 8px;
+    letter-spacing: -.01em;
+}
+
+.comanda p {
+    color: #b6cde2;
+    margin: 0;
+    max-width: 46ch;
+    font-size: .94rem;
+}
+
+.comanda-acciones {
+    display: flex;
+    gap: 10px;
+    margin-top: 18px;
+    flex-wrap: wrap;
+}
+
+.btn-comanda {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    border-radius: 999px;
+    padding: 11px 22px;
+    font-weight: 700;
+    font-size: .88rem;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: transform .18s, background .18s, border-color .18s;
+}
+
+.btn-comanda-primario {
+    background: var(--rojo);
+    color: #fff;
+}
+
+.btn-comanda-primario:hover {
+    background: #ff2748;
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+.btn-comanda-fantasma {
+    background: rgba(255, 255, 255, .06);
+    border-color: rgba(255, 255, 255, .26);
+    color: #dbe8f4;
+}
+
+.btn-comanda-fantasma:hover {
+    background: rgba(255, 255, 255, .14);
+    color: #fff;
+    transform: translateY(-2px);
+}
+
+/* ---- Sello de avance ---- */
+
+.sello {
+    flex: none;
+    text-align: center;
+    padding: 18px 24px;
+    border: 2px dashed rgba(255, 255, 255, .26);
+    border-radius: var(--r-medio);
+    background: rgba(0, 0, 0, .16);
+}
+
+.sello-anillo {
+    --pct: 0;
+    width: 104px;
+    height: 104px;
+    margin: 0 auto 10px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    background:
+        conic-gradient(var(--ambar) calc(var(--pct) * 1%), rgba(255, 255, 255, .12) 0);
+}
+
+.sello-anillo span {
+    width: 78px;
+    height: 78px;
+    border-radius: 50%;
+    background: #03284c;
+    display: grid;
+    place-items: center;
+    font-family: var(--display);
+    font-size: 1.5rem;
+    color: #fff;
+}
+
+.sello .rotulo {
+    color: #9fb6cc;
+}
+
+.sello-nota {
+    display: block;
+    margin-top: 6px;
+    font-family: var(--ticket);
+    font-size: .72rem;
+    color: #7fa9cf;
+}
+
+/* ---------------------------------------------------------------------------
+   ENCABEZADOS DE SECCIÓN
+--------------------------------------------------------------------------- */
+
+.section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    margin: 30px 0 14px;
+}
+
+.section-header h3 {
+    font-family: var(--display);
+    font-size: 1rem;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--azul-hondo);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.section-header h3 i {
+    color: var(--rojo);
+    font-size: 1.05rem;
+}
+
+.section-header .liga {
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--azul);
+    text-decoration: none;
+}
+
+.section-header .liga:hover {
+    text-decoration: underline;
+}
+
+/* ---------------------------------------------------------------------------
+   TIRA DE MÉTRICAS
+--------------------------------------------------------------------------- */
+
+.metricas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+    gap: 14px;
+}
+
+.metrica {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--r-medio);
+    padding: 18px 20px;
+    box-shadow: var(--sombra-sutil);
+    position: relative;
+    overflow: hidden;
+}
+
+/* Cada métrica lleva su color de estado en una franja lateral delgada. */
+.metrica::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 14px;
+    bottom: 14px;
+    width: 3px;
+    border-radius: 0 3px 3px 0;
+    background: var(--azul);
+}
+
+.metrica[data-tono="verde"]::before { background: var(--verde); }
+.metrica[data-tono="ambar"]::before { background: var(--ambar); }
+.metrica[data-tono="rojo"]::before  { background: var(--rojo); }
+
+.metrica-valor {
+    font-family: var(--display);
+    font-size: 1.9rem;
+    line-height: 1.1;
+    color: var(--azul-hondo);
+    font-variant-numeric: tabular-nums;
+    margin: 6px 0 2px;
+}
+
+.metrica-valor small {
+    font-family: var(--body);
+    font-size: .82rem;
+    font-weight: 700;
+    color: var(--tinta-suave);
+    margin-left: 3px;
+}
+
+.metrica-pie {
+    font-size: .76rem;
+    color: var(--tinta-media);
+    margin: 0;
+}
+
+/* ---------------------------------------------------------------------------
+   TARJETAS DE MÓDULO
+--------------------------------------------------------------------------- */
+
+.cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(268px, 1fr));
+    gap: 18px;
+}
+
+.module-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--r-medio);
+    padding: 22px;
+    text-decoration: none;
+    color: var(--tinta);
+    box-shadow: var(--sombra-sutil);
+    overflow: hidden;
+    transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+}
+
+.module-card::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 3px;
+    background: var(--azul);
+    transform: scaleX(0);
+    transform-origin: left;
+    transition: transform .25s ease;
+}
+
+.module-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--sombra-carta);
+    border-color: var(--borde-fuerte);
+    color: var(--tinta);
+}
+
+.module-card:hover::after {
+    transform: scaleX(1);
+}
+
+.module-card-tapa {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.module-card i.module-icono {
+    font-size: 1.4rem;
+    color: var(--azul);
+    background: #eaf3fa;
+    width: 46px;
+    height: 46px;
+    border-radius: 12px;
+    display: grid;
+    place-items: center;
+}
+
+.module-card h5 {
+    font-weight: 800;
+    font-size: 1.02rem;
+    margin: 0 0 6px;
+}
+
+.module-card p {
+    color: var(--tinta-media);
+    font-size: .86rem;
+    margin: 0;
+    flex: 1;
+}
+
+/* Marca de estado: dice si el módulo ya tiene registro o sigue pendiente. */
+.marca {
+    flex: none;
+    font-size: .66rem;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 5px 11px;
+    border-radius: 999px;
+    background: #eef1f6;
+    color: var(--tinta-suave);
+    white-space: nowrap;
+}
+
+.marca[data-estado="activo"] { background: #e4f7ef; color: #0c7a53; }
+.marca[data-estado="curso"]  { background: #fdf1dc; color: #8a5c07; }
+
+.module-card-pie {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--borde-fuerte);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    font-family: var(--ticket);
+    font-size: .76rem;
+    color: var(--tinta-media);
+}
+
+.barra {
+    height: 6px;
+    border-radius: 999px;
+    background: #e8edf4;
+    overflow: hidden;
+    margin-top: 12px;
+}
+
+.barra > i {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--azul), var(--verde));
+    transition: width .7s ease;
+}
+
+/* ---------------------------------------------------------------------------
+   BANNER DE MÓDULO (Simulador 2D y Entorno 3D)
+--------------------------------------------------------------------------- */
+
+.module-banner {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-left: 4px solid var(--rojo);
+    border-radius: var(--r-medio);
+    padding: 18px 22px;
+    margin-bottom: 18px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+    box-shadow: var(--sombra-sutil);
+}
+
+.module-banner h2 {
+    font-family: var(--display);
+    font-size: 1.18rem;
+    letter-spacing: .04em;
+    color: var(--azul-hondo);
+    margin: 0;
+}
+
+.module-banner p {
+    color: var(--tinta-media);
+    font-size: .86rem;
+    margin: 3px 0 0;
+}
+
+.module-tag {
+    flex: none;
+    background: #eaf3fa;
+    border: 1px solid #cfe3f2;
+    color: var(--azul);
+    font-size: .7rem;
+    font-weight: 800;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    padding: 8px 15px;
+    border-radius: 999px;
+}
+
+.sim-card {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--r-medio);
+    padding: 20px;
+    box-shadow: var(--sombra-sutil);
+}
+
+/* ---------------------------------------------------------------------------
+   PANEL DE KPIs
+--------------------------------------------------------------------------- */
+
+.kpi-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 18px;
+    flex-wrap: wrap;
+    margin-bottom: 18px;
+}
+
+.kpi-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+    margin-bottom: 18px;
+}
+
+.kpi-chart {
+    background: var(--tarjeta);
+    border: 1px solid var(--borde);
+    border-radius: var(--r-medio);
+    padding: 22px;
+    box-shadow: var(--sombra-sutil);
+}
+
+.kpi-rejilla {
+    display: grid;
+    grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr);
+    gap: 16px;
+    align-items: start;
+}
+
+/* ---- Gráfica de barras por turno ---- */
+
+.grafica {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    height: 220px;
+    margin-top: 18px;
+    padding-bottom: 26px;
+    border-bottom: 1px solid var(--borde);
+}
+
+.grafica-col {
+    position: relative;
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+}
+
+.grafica-col > i {
+    display: block;
+    width: 100%;
+    max-width: 44px;
+    border-radius: 7px 7px 0 0;
+    background: linear-gradient(180deg, var(--azul), #00537f);
+    transition: height .6s ease;
+}
+
+.grafica-col[data-tono="verde"] > i { background: linear-gradient(180deg, var(--verde), #0b8b5e); }
+.grafica-col[data-tono="ambar"] > i { background: linear-gradient(180deg, var(--ambar), #b57408); }
+
+.grafica-col b {
+    position: absolute;
+    top: -20px;
+    font-family: var(--ticket);
+    font-size: .72rem;
+    color: var(--tinta-media);
+    font-weight: 400;
+}
+
+.grafica-col span {
+    position: absolute;
+    bottom: -22px;
+    font-family: var(--ticket);
+    font-size: .68rem;
+    color: var(--tinta-suave);
+}
+
+/* ---- Desglose lateral ---- */
+
+.desglose {
+    list-style: none;
+    margin: 16px 0 0;
+    padding: 0;
+}
+
+.desglose li {
+    display: grid;
+    grid-template-columns: 96px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 9px 0;
+    border-bottom: 1px dashed var(--borde);
+    font-size: .84rem;
+}
+
+.desglose li:last-child { border-bottom: 0; }
+
+.desglose .via {
+    height: 7px;
+    border-radius: 999px;
+    background: #eef1f6;
+    overflow: hidden;
+}
+
+.desglose .via > i {
+    display: block;
+    height: 100%;
+    border-radius: 999px;
+    background: var(--azul);
+    transition: width .6s ease;
+}
+
+.desglose .cifra {
+    font-family: var(--ticket);
+    font-weight: 700;
+    color: var(--azul-hondo);
+}
+
+/* ---- Historial ---- */
+
+.historial {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 14px;
+    font-size: .86rem;
+}
+
+.historial th {
+    text-align: left;
+    font-size: .66rem;
+    font-weight: 800;
+    letter-spacing: .12em;
+    text-transform: uppercase;
+    color: var(--tinta-suave);
+    padding: 0 12px 10px 0;
+    border-bottom: 1px solid var(--borde);
+}
+
+.historial td {
+    padding: 11px 12px 11px 0;
+    border-bottom: 1px solid var(--borde);
+    font-variant-numeric: tabular-nums;
+}
+
+.historial tbody tr:last-child td { border-bottom: 0; }
+.historial tbody tr:hover { background: #f7f9fc; }
+
+.historial .folio {
+    font-family: var(--ticket);
+    color: var(--tinta-suave);
+}
+
+/* ---- Estado vacío ----
+   Sin sesión o sin turnos, la pantalla dice qué falta y cómo llenarla.
+   Un panel en blanco no le sirve a nadie. */
+
+.vacio {
+    text-align: center;
+    padding: 54px 24px;
+    border: 2px dashed var(--borde-fuerte);
+    border-radius: var(--r-medio);
+    background: var(--tarjeta);
+}
+
+.vacio i {
+    font-size: 2.1rem;
+    color: var(--tinta-suave);
+    display: block;
+    margin-bottom: 12px;
+}
+
+.vacio h4 {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    color: var(--azul-hondo);
+    margin: 0 0 6px;
+}
+
+.vacio p {
+    color: var(--tinta-media);
+    font-size: .88rem;
+    max-width: 46ch;
+    margin: 0 auto 18px;
+}
+
+.oculto { display: none !important; }
+
+/* ---------------------------------------------------------------------------
+   PIE
+--------------------------------------------------------------------------- */
+
+.footer {
+    background: var(--azul-tinta);
+    color: #93a7bd;
+    text-align: center;
+    padding: 18px;
+    font-size: .8rem;
+    margin-top: auto;
+}
+
+/* ---------------------------------------------------------------------------
+   LOGO
+--------------------------------------------------------------------------- */
+
+.logo-container {
+    display: flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.logo-dominos {
+    height: 42px;
+    width: auto;
+    object-fit: contain;
+}
+
+/* ---------------------------------------------------------------------------
+   RESPONSIVE
+--------------------------------------------------------------------------- */
+
+@media (max-width: 1100px) {
+    .kpi-rejilla { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 991px) {
+    .menu-btn { display: grid; place-items: center; }
+
+    .sidebar {
+        position: fixed;
+        left: -100%;
+        top: var(--topbar-h);
+        width: 250px;
+        height: calc(100% - var(--topbar-h));
+        z-index: 999;
+        box-shadow: var(--sombra-alta);
+        overflow-y: auto;
+    }
+
+    .sidebar.show { left: 0; }
+
+    .layout { flex-direction: column; }
+
+    :root { --pad-main: 18px; }
+
+    .comanda-fila { flex-direction: column; align-items: stretch; }
+
+    .sello { align-self: flex-start; }
+}
+
+@media (max-width: 640px) {
+    .topbar { padding: 0 14px; }
+    .topbar small { display: none; }
+    .cuenta-nombre, .cuenta-rol { display: none; }
+    .cuenta-chip { padding: 4px; }
+
+    :root { --pad-main: 14px; }
+
+    .comanda { padding: 26px 20px 24px; }
+    .module-banner { flex-direction: column; align-items: flex-start; }
+    .grafica { height: 170px; }
+    .desglose li { grid-template-columns: 78px 1fr auto; gap: 8px; font-size: .8rem; }
+    .historial .col-op { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .module-card,
+    .module-card::after,
+    .barra > i,
+    .grafica-col > i,
+    .desglose .via > i,
+    .btn-comanda,
+    .btn-entrar { transition: none; }
+}
+
+/* ===================================================================
+   ESCENARIO DEL SIMULADOR 2D
+   -------------------------------------------------------------------
+   ESTO NO ES DECORACIÓN: sin estas reglas el juego crece sin parar.
+
+   Phaser mide el contenedor para calcular su escala. Si el contenedor
+   no tiene altura propia, la toma del canvas... que es justo lo que
+   Phaser acaba de dimensionar. Cada revisión de tamaño lee un padre
+   más grande y agranda el canvas otra vez: el lienzo se dispara solo
+   a los pocos segundos de abrir el módulo.
+
+   El aspect-ratio rompe ese círculo: le da al contenedor una altura
+   que depende únicamente de su ancho, nunca del canvas.
+
+   El tope de 1280 px es el ancho interno del juego. Así en escritorio
+   el canvas se dibuja 1:1 y el texto sale nítido; por debajo de eso,
+   Phaser reduce solo con Scale.FIT.
+=================================================================== */
+
+.simulator-stage {
+    display: flex;
+    justify-content: center;
+}
+
+#game-container {
+    width: 100%;
+    max-width: 1280px;
+    aspect-ratio: 1280 / 768;
+
+    margin: 0 auto;
+
+    border-radius: var(--r-medio);
+    overflow: hidden;
+
+    box-shadow: var(--sombra-alta);
+}
+
+#game-container canvas {
+    display: block;
+    max-width: 100%;
+
+    /* El navegador ya recibe el lienzo al tamaño correcto: no lo suavices */
+    image-rendering: auto;
+}
+
+/* Navegadores sin aspect-ratio: altura de respaldo, con el mismo fin */
+
+@supports not (aspect-ratio: 1 / 1) {
+    #game-container {
+        height: 768px;
+    }
+}
+
+@media (max-width: 768px) {
+    #game-container {
+        border-radius: 10px;
+    }
+}
+
+
+/* ===================================================================
+   BANNER COMPACTO DEL MÓDULO 2D
+   -------------------------------------------------------------------
+   Los marcadores (puntaje, racha, tiempo) viven dentro del juego, así
+   que aquí el banner solo hace de encabezado y le cede altura al
+   lienzo.
+=================================================================== */
+
+.module-banner--slim {
+    padding: 16px 22px;
+}
+
+.module-banner--slim h2 {
+    font-size: 1.25rem;
+    margin: 0;
+}
+
+.module-banner--slim p {
+    margin: 2px 0 0;
+    font-size: .88rem;
+    color: var(--tinta-media);
+}
+
+.module-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+
+    font-size: .82rem;
+    font-weight: 600;
+    color: var(--tinta-media);
+
+    background: var(--papel);
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+
+    padding: 8px 16px;
+
+    white-space: nowrap;
+}
+
+.module-hint i {
+    color: var(--azul);
+    font-size: 1rem;
+}
+
+@media (max-width: 900px) {
+    .module-hint {
+        display: none;
+    }
+}
+
+
+/* ===================================================================
+   MÓDULO ENTORNO 3D                   ← SECCIÓN RESTAURADA
+   -------------------------------------------------------------------
+   Esta es la sección que se perdió cuando el archivo se reemplazó por
+   la versión que salió del trabajo del Simulador 2D. Aquí viven las
+   reglas que usan modules/entorno-3d/index.html y js/game3d.js.
+
+   Va al final a propósito: solo agrega, no pisa nada de lo de arriba.
+   Con esto ya NO necesitas el archivo css/entorno-3d.css; si lo tienes
+   enlazado en el index del módulo, puedes borrar esa línea.
+
+   Dos cosas que a propósito NO se tocan, porque este CSS lo comparten
+   todos los módulos:
+     · .sim-card         → ya está definido arriba y así está bien.
+     · .simulator-panel  → la versión vieja de este bloque le ponía
+                           min-height:760px, y hoy eso te descuadraría
+                           el Simulador 2D.
+=================================================================== */
+
+/* ---------- Visor y panel: lado a lado en escritorio ---------- */
+
+.entorno-layout{
+    display:grid;
+    grid-template-columns:minmax(0,1fr) 340px;
+    align-items:start;
+    gap:20px;
+}
+
+/* Sin padding, para que el 3D llegue al borde de la tarjeta */
+
+.viewer-panel{
+    padding:0;
+    overflow:hidden;
+    display:flex;
+    flex-direction:column;
+    min-height:640px;
+}
+
+#scene-container{
+    position:relative;
+    flex:1;
+    width:100%;
+    min-height:560px;
+    overflow:hidden;
+    background:#0b0d10;
+}
+
+/* Quita el margen fantasma que el navegador le pone al canvas */
+
+#scene-container canvas{
+    display:block;
+    outline:none;
+    cursor:grab;
+}
+
+.stations-panel{
+    position:sticky;
+    top:90px;
+    min-height:0;
+    display:flex;
+    flex-direction:column;
+    max-height:calc(100vh - 120px);
+}
+
+/* ---------- Barra de modos: Explorar · Recorrido · Reto ---------- */
+
+.mode-bar{
+    display:flex;
+    gap:8px;
+    padding:12px 16px;
+    background:#002244;
+    border-bottom:3px solid #e31837;
+}
+
+.mode-chip{
+    display:inline-flex;
+    align-items:center;
+    gap:7px;
+    border:1px solid rgba(255,255,255,.22);
+    background:transparent;
+    color:#cfe0ee;
+    font-size:.8rem;
+    font-weight:700;
+    letter-spacing:.02em;
+    padding:7px 14px;
+    border-radius:999px;
+    cursor:pointer;
+    transition:background .18s ease, color .18s ease, border-color .18s ease;
+}
+
+.mode-chip:hover{
+    background:rgba(255,255,255,.1);
+    color:#fff;
+}
+
+.mode-chip.modo-activo{
+    background:#0077b6;
+    border-color:#0077b6;
+    color:#fff;
+}
+
+.mode-chip:focus-visible{
+    outline:2px solid #ffd166;
+    outline-offset:2px;
+}
+
+/* ---------- Minimapa ----------
+   Sin este position:absolute se va al flujo normal y aparece arriba
+   del área negra en vez de flotando en la esquina del visor.
+-------------------------------- */
+
+.minimapa{
+    position:absolute;
+    left:14px;
+    bottom:14px;
+    z-index:4;
+    width:190px;
+    height:auto;
+    border-radius:10px;
+    border:1px solid rgba(255,255,255,.18);
+    box-shadow:0 6px 20px rgba(0,0,0,.45);
+    pointer-events:none;
+}
+
+/* ---------- Overlay de carga del visor (lo inyecta game3d.js) ---------- */
+
+.scene-loading{
+    position:absolute;
+    inset:0;
+    z-index:5;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    gap:12px;
+    background:#0b0d10;
+}
+
+.scene-loading-label{
+    font-family:Arial, sans-serif;
+    font-size:.85rem;
+    font-weight:700;
+    color:#f4f6f9;
+    letter-spacing:.03em;
+}
+
+.scene-loading-track{
+    width:220px;
+    height:6px;
+    border-radius:6px;
+    background:rgba(255,255,255,.15);
+    overflow:hidden;
+}
+
+.scene-loading-fill{
+    height:100%;
+    width:0%;
+    background:#0077b6;
+    transition:width .2s ease;
+}
+
+/* ---------- Pie del visor: ayuda de controles + badge ---------- */
+
+.viewer-footer{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    padding:12px 16px;
+    background:#f8f9fa;
+    border-top:1px solid #e5e5e5;
+    font-size:.8rem;
+    color:#6c757d;
+}
+
+.viewer-badge{
+    flex:none;
+    background:#0077b6;
+    color:#fff;
+    font-weight:700;
+    font-size:.7rem;
+    letter-spacing:.03em;
+    padding:5px 10px;
+    border-radius:20px;
+}
+
+/* ---------- Panel derecho: ESTACIONES DE TRABAJO ---------- */
+
+.stations-panel h5{
+    font-weight:700;
+    color:#1d3557;
+    margin-bottom:14px;
+}
+
+.stations-hint{
+    font-size:.78rem;
+    color:#6c757d;
+    margin:-8px 0 14px;
+}
+
+.station-list{
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+    overflow-y:auto;
+    max-height:300px;
+    padding-right:4px;
+    margin-bottom:14px;
+}
+
+.station-list::-webkit-scrollbar{
+    width:6px;
+}
+
+.station-list::-webkit-scrollbar-thumb{
+    background:#d3d8de;
+    border-radius:6px;
+}
+
+.station-item{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    width:100%;
+    text-align:left;
+    background:#f3f4f6;
+    border:1px solid #e5e5e5;
+    border-radius:12px;
+    padding:10px 14px;
+    font-size:.85rem;
+    font-weight:600;
+    color:#1d3557;
+    cursor:pointer;
+    transition:.2s;
+}
+
+.station-item i{
+    font-size:1.05rem;
+    color:#0077b6;
+    flex:none;
+}
+
+.station-item:hover{
+    background:#eef5fb;
+    border-color:#0077b6;
+}
+
+.station-item.station-active{
+    background:#0077b6;
+    border-color:#0077b6;
+    color:#fff;
+}
+
+.station-item.station-active i{
+    color:#fff;
+}
+
+/* El número del paso no es adorno: marca el orden real en que se
+   recorre la cocina, del insumo que llega a la pizza que sale. */
+
+.station-step{
+    flex:none;
+    width:22px;
+    height:22px;
+    border-radius:6px;
+    background:#002244;
+    color:#fff;
+    font-size:.72rem;
+    font-weight:700;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+}
+
+.station-item.station-active .station-step{
+    background:#fff;
+    color:#0077b6;
+}
+
+.station-step-lg{
+    width:28px;
+    height:28px;
+    font-size:.85rem;
+    background:#0077b6;
+}
+
+/* ---------- Ficha de la estación ---------- */
+
+.station-detail{
+    background:#f8f9fa;
+    border:1px solid #e5e5e5;
+    border-radius:12px;
+    padding:14px 16px;
+    min-height:96px;
+    overflow-y:auto;
+}
+
+.station-detail h6{
+    font-weight:700;
+    color:#1d3557;
+    margin-bottom:6px;
+}
+
+.station-detail p{
+    font-size:.85rem;
+    color:#495057;
+    margin-bottom:0;
+}
+
+.detalle-cabeza{
+    display:flex;
+    align-items:center;
+    gap:9px;
+    margin-bottom:8px;
+}
+
+.detalle-cabeza h6{
+    margin:0;
+}
+
+.detalle-subtitulo{
+    margin:12px 0 6px;
+    font-size:.72rem;
+    font-weight:700;
+    letter-spacing:.07em;
+    text-transform:uppercase;
+    color:#0077b6;
+}
+
+.detalle-tareas{
+    margin:0;
+    padding-left:18px;
+    font-size:.82rem;
+    color:#495057;
+}
+
+.detalle-tareas li{
+    margin-bottom:4px;
+}
+
+.station-tip{
+    display:flex;
+    align-items:flex-start;
+    gap:8px;
+    margin-top:10px;
+    padding:8px 10px;
+    background:#fff8e6;
+    border:1px solid #ffe4a3;
+    border-radius:10px;
+    font-size:.78rem;
+    color:#8a6d1a;
+}
+
+.station-tip i{
+    color:#e3a23b;
+    margin-top:1px;
+}
+
+/* ---------- Tarjeta del modo Reto ---------- */
+
+.reto-panel{
+    background:#002244;
+    color:#eaf2f8;
+    border-radius:12px;
+    padding:14px 16px;
+    margin-bottom:14px;
+    border:1px solid #002244;
+    transition:border-color .2s ease, background .2s ease;
+}
+
+/* Obligatorio: cualquier display en .reto-panel anularía el atributo
+   hidden que usa game3d.js para esconder la tarjeta. */
+
+.reto-panel[hidden]{
+    display:none;
+}
+
+.reto-cabeza{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:10px;
+    font-size:.74rem;
+    font-weight:700;
+    letter-spacing:.05em;
+    text-transform:uppercase;
+    color:#8fb6d4;
+    margin-bottom:8px;
+}
+
+.reto-marcador{
+    background:rgba(255,255,255,.14);
+    border-radius:999px;
+    padding:2px 10px;
+    color:#fff;
+    letter-spacing:0;
+}
+
+.reto-pregunta{
+    font-size:.92rem;
+    font-weight:700;
+    line-height:1.35;
+    margin:0 0 6px;
+    color:#fff;
+}
+
+.reto-ayuda{
+    font-size:.78rem;
+    color:#a9c4d9;
+    margin:0;
+}
+
+.reto-panel.reto-ok{
+    background:#0f6b4c;
+    border-color:#13b97d;
+}
+
+.reto-panel.reto-mal{
+    background:#7a1524;
+    border-color:#e31837;
+}
+
+.reto-panel .btn{
+    margin-top:10px;
+    color:#fff;
+    border-color:rgba(255,255,255,.5);
+}
+
+.reto-panel .btn:hover{
+    background:#fff;
+    color:#002244;
+}
+
+/* ---------- Responsive del Entorno 3D ---------- */
+
+@media (max-width:1100px){
+
+    .entorno-layout{
+        grid-template-columns:1fr;
+    }
+
+    .stations-panel{
+        position:static;
+        max-height:none;
+    }
+
+    .station-list{
+        max-height:none;
+    }
+
+}
+
+@media (max-width:640px){
+
+    .viewer-panel{
+        min-height:480px;
+    }
+
+    #scene-container{
+        min-height:400px;
+    }
+
+    .minimapa{
+        width:130px;
+        left:10px;
+        bottom:10px;
+    }
+
+    .mode-chip{
+        padding:7px 10px;
+        font-size:.74rem;
+    }
+
+}
+
+/* Sin animaciones si el sistema pide movimiento reducido */
+
+@media (prefers-reduced-motion: reduce){
+
+    .mode-chip,
+    .reto-panel,
+    .station-item,
+    .scene-loading,
+    .scene-loading-fill{
+        transition:none;
+    }
+
+}
+
+/* Estilos específicos para centrar el login */
+        .login-wrapper {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f4f5f7;
+            background-image: url('images/logo.png'); /* Marca de agua opcional */
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: 300px;
+            background-blend-mode: overlay;
+        }
+        .login-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            max-width: 450px;
+            width: 100%;
+            border-top: 5px solid #e31837; /* Rojo Domino's */
+            padding: 2rem;
+            z-index: 10;
+        }
+        .btn-dominos {
+            background-color: #006491; /* Azul Domino's */
+            border: none;
+        }
+        .btn-dominos:hover {
+            background-color: #005073;
+        }
+
+/* ===================================================================
+   RESPONSIVIDAD MÓVIL
+   -------------------------------------------------------------------
+   Bloque agregado al final a propósito: solo suma reglas, no reescribe
+   ninguna de las de arriba ni toca la lógica de los módulos.
+
+   Qué resuelve, en orden de importancia:
+
+     1. TOQUE. Sin `touch-action: none` el navegador se queda con el
+        gesto: arrastras un ingrediente y en vez de moverlo, la página
+        hace scroll. El mismo problema mata el giro de cámara del 3D.
+        Es LA corrección que hace usables los dos escenarios en celular.
+
+     2. ALTURA REAL. En móvil `100vh` incluye la barra de direcciones,
+        así que el escenario queda cortado por debajo. Se usa `100dvh`
+        cuando el navegador lo soporta, con `100vh` de respaldo.
+
+     3. APROVECHAR LA PANTALLA. En vertical el lienzo llega de borde a
+        borde; en horizontal se dimensiona por la altura de la ventana
+        para que ocupe todo lo disponible.
+
+   Sobre el lienzo 2D: su alto sigue saliendo del ancho (aspect-ratio) o
+   del alto de la ventana (dvh). Nunca del canvas. Eso es lo que evita
+   el crecimiento descontrolado que documenta la sección del simulador.
+=================================================================== */
+
+/* -------------------------------------------------------------------
+   1 · BASE
+------------------------------------------------------------------- */
+
+html {
+    /* iOS agranda por su cuenta el texto de los bloques angostos al
+       girar el teléfono. Esto se lo impide. */
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+}
+
+body {
+    /* El destello gris del toque en iOS/Android sobra: los enlaces y
+       botones ya tienen su propio estado. */
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Ninguna imagen desborda su columna en pantallas angostas */
+img {
+    max-width: 100%;
+    height: auto;
+}
+
+/* -------------------------------------------------------------------
+   2 · SUPERFICIES TÁCTILES DE LOS ESCENARIOS
+   Vale tanto para Phaser como para Three.js: dentro del lienzo el
+   gesto es del juego, no del navegador.
+------------------------------------------------------------------- */
+
+#game-container,
+#game-container canvas,
+#scene-container,
+#scene-container canvas {
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* Y que el rebote del scroll no se propague a la página al llegar al
+   borde del escenario. */
+#game-container,
+#scene-container {
+    overscroll-behavior: contain;
+}
+
+#scene-container canvas {
+    max-width: 100%;
+}
+
+/* -------------------------------------------------------------------
+   3 · AVISO DE GIRAR EL TELÉFONO
+   Oculto siempre; solo aparece en pantallas chicas en vertical, que es
+   donde el escenario queda a menos de la mitad de su tamaño útil.
+------------------------------------------------------------------- */
+
+.aviso-girar {
+    display: none;
+}
+
+@media (max-width: 860px) and (orientation: portrait) {
+
+    .aviso-girar {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+
+        margin: 0 0 12px;
+        padding: 10px 14px;
+
+        background: #fff8e6;
+        border: 1px solid #ffe4a3;
+        border-radius: var(--r-chico);
+
+        font-size: .8rem;
+        line-height: 1.35;
+        color: #8a6d1a;
+    }
+
+    .aviso-girar i {
+        flex: none;
+        font-size: 1.1rem;
+        color: #e3a23b;
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   4 · BARRA SUPERIOR Y MENÚ EN PANTALLAS CHICAS
+------------------------------------------------------------------- */
+
+@media (max-width: 480px) {
+
+    /* La barra baja de 68 a 58 px. Como el menú lateral y los
+       escenarios a pantalla completa se miden con esta variable, todo
+       se recoloca solo. */
+    :root { --topbar-h: 58px; }
+
+    .topbar { gap: 10px; }
+    .topbar h4 { font-size: .92rem; }
+
+    .logo-dominos { height: 34px; }
+
+    .btn-entrar {
+        padding: 9px 14px;
+        font-size: .8rem;
+    }
+
+}
+
+/* Dedo, no cursor: los blancos de toque suben a 44 px, que es el
+   mínimo cómodo en pantalla táctil. */
+@media (pointer: coarse) {
+
+    .menu-btn {
+        width: 44px;
+        height: 44px;
+    }
+
+    .btn-salir {
+        width: 42px;
+        height: 42px;
+    }
+
+    .sidebar ul li a {
+        padding: 14px;
+    }
+
+    .station-item {
+        padding: 13px 14px;
+    }
+
+    .mode-chip {
+        padding: 10px 15px;
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   5 · SIMULADOR 2D
+------------------------------------------------------------------- */
+
+/* --- Vertical: el lienzo se lleva todo el ancho de la ventana ---
+   Los márgenes negativos cancelan el respiro lateral del contenido,
+   así el canvas gana los 28 px que se comía el padding. */
+
+@media (max-width: 860px) and (orientation: portrait) {
+
+    .simulator-stage {
+        margin-left: calc(var(--pad-main) * -1);
+        margin-right: calc(var(--pad-main) * -1);
+    }
+
+    #game-container {
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+}
+
+/* --- Horizontal en celular: el lienzo se mide por la altura ---
+   `pointer: coarse` limita esto a pantallas táctiles: una laptop de
+   ventana baja no debe entrar aquí. */
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+
+    /* La barra deja de ser pegajosa para no comerse altura útil. */
+    .topbar { position: static; }
+
+    .module-banner--slim,
+    .aviso-girar,
+    .footer { display: none; }
+
+    .simulator-stage {
+        margin-left: calc(var(--pad-main) * -1);
+        margin-right: calc(var(--pad-main) * -1);
+    }
+
+    #game-container {
+        /* El ancho sale del aspect-ratio ya definido arriba; el alto,
+           de la ventana. En ningún caso del canvas. */
+        width: auto;
+        max-width: 100%;
+        height: calc(100vh - var(--topbar-h) - (var(--pad-main) * 2));
+
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    @supports (height: 100dvh) {
+        #game-container {
+            height: calc(100dvh - var(--topbar-h) - (var(--pad-main) * 2));
+        }
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   6 · ENTORNO 3D
+------------------------------------------------------------------- */
+
+@media (max-width: 991px) {
+
+    /* El visor deja de exigir 640 px fijos y pasa a medirse contra la
+       ventana. Con `flex: none` la altura la manda esta regla, no el
+       reparto del flex. */
+    .viewer-panel {
+        min-height: 0;
+    }
+
+    #scene-container {
+        flex: none;
+        height: 56vh;
+        min-height: 280px;
+        max-height: 460px;
+    }
+
+    @supports (height: 100dvh) {
+        #scene-container { height: 56dvh; }
+    }
+
+    /* Deliberadamente NO ocupa toda la pantalla: como dentro del visor
+       el gesto es del 3D, hace falta dejar página arriba y abajo para
+       que el usuario pueda seguir haciendo scroll. */
+
+    .viewer-footer {
+        flex-wrap: wrap;
+        gap: 8px;
+        font-size: .74rem;
+    }
+
+    /* Diez estaciones sin tope convierten la página en una lista
+       interminable. Con este alto vuelve a ser una lista que se
+       desplaza dentro de su tarjeta. */
+    .station-list {
+        max-height: 46vh;
+    }
+
+}
+
+@media (max-width: 640px) {
+
+    /* Los tres modos caben en fila desplazable en vez de amontonarse */
+    .mode-bar {
+        overflow-x: auto;
+        scrollbar-width: none;
+    }
+
+    .mode-bar::-webkit-scrollbar { display: none; }
+
+    .mode-chip { flex: none; }
+
+    .stations-panel { padding: 16px; }
+
+    .minimapa {
+        width: 112px;
+    }
+
+}
+
+/* Horizontal en celular: el visor se estira a lo que dé la ventana,
+   descontando barra de modos y pie del visor. */
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+
+    .module-banner,
+    .aviso-girar { display: none; }
+
+    #scene-container {
+        height: calc(100vh - var(--topbar-h) - 140px);
+        min-height: 220px;
+        max-height: none;
+    }
+
+    @supports (height: 100dvh) {
+        #scene-container {
+            height: calc(100dvh - var(--topbar-h) - 140px);
+        }
+    }
+
+    .minimapa {
+        width: 96px;
+        left: 8px;
+        bottom: 8px;
+    }
+
+}
+
+/* El botón de pantalla completa lo crea game3d.js con estilos en línea,
+   así que solo se le puede ganar con !important. En táctil sube a 44 px
+   para que se pueda tocar sin apuntar. */
+
+@media (pointer: coarse) {
+
+    #scene-container > button {
+        width: 44px !important;
+        height: 44px !important;
+        top: 10px !important;
+        right: 10px !important;
+        font-size: 17px !important;
+    }
+
+}
+
+/* -------------------------------------------------------------------
+   7 · DASHBOARD, KPIs Y LOGIN
+------------------------------------------------------------------- */
+
+@media (max-width: 640px) {
+
+    .section-header {
+        flex-wrap: wrap;
+        gap: 6px;
+        margin: 24px 0 12px;
+    }
+
+    .comanda-acciones .btn-comanda {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+    /* Con muchos turnos las columnas se apretaban hasta desaparecer */
+    .grafica { gap: 6px; }
+    .grafica-col > i { max-width: 30px; }
+
+    .kpi-header { gap: 10px; }
+
+    .login-wrapper { padding: 20px 14px; }
+    .login-card { padding: 1.5rem; }
+
+}
+
+@media (max-width: 380px) {
+
+    /* El rótulo del valor encima de cada barra ya no cabe */
+    .grafica-col b { display: none; }
+
+}
+
+
+/* ===================================================================
+   PALANCA TÁCTIL DEL ENTORNO 3D
+   -------------------------------------------------------------------
+   La crea game3d.js dentro de #scene-container y solo la muestra en
+   modo Recorrido sobre pantalla táctil. Va abajo a la derecha porque
+   el minimapa ocupa la esquina izquierda y el botón de pantalla
+   completa la de arriba.
+=================================================================== */
+
+.joystick-tactil {
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    z-index: 5;
+
+    width: 116px;
+    height: 116px;
+    border-radius: 50%;
+
+    background: rgba(0, 34, 68, .42);
+    border: 1px solid rgba(255, 255, 255, .28);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .35);
+
+    /* Sin esto el navegador se lleva el gesto y la palanca no responde */
+    touch-action: none;
+}
+
+/* Obligatorio: cualquier display anularía el atributo hidden con el que
+   game3d.js la esconde fuera del modo Recorrido. */
+
+.joystick-tactil[hidden] {
+    display: none;
+}
+
+.joystick-punto {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+
+    width: 46px;
+    height: 46px;
+    border-radius: 50%;
+
+    background: rgba(255, 255, 255, .88);
+    border: 1px solid rgba(0, 0, 0, .18);
+
+    transform: translate(-50%, -50%);
+
+    /* El dedo apunta al aro, no al punto: si el punto capturara el toque,
+       el arrastre se cortaría en cuanto el punto se moviera. */
+    pointer-events: none;
+}
+
+/* En horizontal la pantalla es baja: la palanca se achica para no
+   taparle media cocina al usuario. */
+
+@media (orientation: landscape) and (max-height: 620px) and (pointer: coarse) {
+
+    .joystick-tactil {
+        width: 92px;
+        height: 92px;
+        right: 12px;
+        bottom: 12px;
+    }
+
+    .joystick-punto {
+        width: 38px;
+        height: 38px;
+    }
+
+}
