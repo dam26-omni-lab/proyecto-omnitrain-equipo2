@@ -1,2285 +1,1903 @@
-/* ============================================================================
-   DOMINO'S SYSTEM — SIMULADOR 2D: ESTACIÓN DE ARMADO
-   ----------------------------------------------------------------------------
-   Flujo:  Intro → Comanda → Armado (drag & drop) → Horno (QTE) →
-           Resultado → [repetir hasta el límite] → Resumen de KPIs
+/* ==========================================================================
+   OMNITRAIN · MÓDULO ENTORNO 3D
+   Cocina Domino's construida por código + modelos .glb del proyecto.
+   Objetivo: que el empleado se familiarice con la cocina y sepa
+   dónde está cada área antes de pisar la tienda.
 
-   TODA la interfaz vive dentro del canvas: comanda, avance, procedimiento,
-   mesa de ingredientes, acciones y marcadores. El HTML solo aporta el marco
-   del portal. Así el texto se dibuja a resolución nativa en vez de depender
-   de contenedores que lo reescalan.
+   Ubicación:  js/game3d.js
+   Lo usa:     modules/entorno-3d/index.html
+   Requiere:   js/three.module.min.js  (vía importmap "three")
+               js/GLTFLoader.js  ·  js/DRACOLoader.js  ·  js/draco/
+   ========================================================================== */
 
-   SOBRE EL ARTE
-   Los ingredientes son PNG reales de recursos/texturas/ing/, cuadrados y
-   de ING_PX de lado. El resto (masa, salsa untada, queso, partículas) se
-   sigue generando por código en BootScene.generarTexturas().
+import * as THREE from 'three';
+import { GLTFLoader } from './GLTFLoader.js';
+import { DRACOLoader } from './DRACOLoader.js';
+// El refrigerador y el bote tienen esqueleto. Object3D.clone() NO reconecta
+// los huesos del clon, así que se dibujan donde estaba el modelo original.
+// SkeletonUtils.clone sí los reconecta, y ya venía en tu proyecto.
+import { clone as clonarConEsqueleto } from './utils/SkeletonUtils.js';
 
-   Para cambiar un ingrediente basta con reemplazar su PNG: el nombre del
-   archivo es la key. Si alguno falta, se dibuja la ficha de respaldo y el
-   juego sigue completo.
+const {
+    Scene, Group, PerspectiveCamera, WebGLRenderer,
+    PlaneGeometry, BoxGeometry, CylinderGeometry, TorusGeometry, SphereGeometry,
+    MeshStandardMaterial, MeshBasicMaterial, Mesh,
+    HemisphereLight, DirectionalLight, PointLight,
+    Color, Fog, TextureLoader, CanvasTexture, LoadingManager,
+    RepeatWrapping, DoubleSide, FrontSide,
+    Box3, Vector2, Vector3, Raycaster,
+    SRGBColorSpace, ACESFilmicToneMapping, PCFSoftShadowMap
+} = THREE;
 
-   OJO CON EL TAMAÑO: todo scale de un ingrediente va multiplicado por
-   ING_K, incluido el valor final de los tweens. Un "scale: 1" suelto deja
-   la pieza del tamaño del PNG (256 px) en vez de los 32 px que le tocan.
+/* ==========================================================================
+   1 · MEDIDAS DE LA COCINA
+   Todo está en metros. Si cambias esto, las estaciones se reacomodan solas
+   porque sus posiciones están escritas en metros reales, no en porcentajes.
+   ========================================================================== */
+const COCINA = {
+    ancho: 11.0,     // eje X  (de -5.5 a 5.5)
+    fondo: 7.5,      // eje Z  (de -3.75 a 3.75)
+    alto: 3.2
+};
+const LIM_X = COCINA.ancho / 2;
+const LIM_Z = COCINA.fondo / 2;
 
-   Tamaños en pantalla: masa 300px · salsa 246px · queso 236px · pieza 32px
-
-   MÚSICA DE FONDO
-   Ver el bloque MUSICA más abajo: solo hay que escribir la ruta del archivo.
-============================================================================ */
-
-/* ---------------------------------------------------------------------------
-   1. LIENZO, DISTRIBUCIÓN, PALETA Y TIPOGRAFÍA
---------------------------------------------------------------------------- */
-
-const GAME_WIDTH = 1280;
-const GAME_HEIGHT = 768;
-
-// Rejilla de la estación. Todo lo demás se deriva de aquí.
-const LAY = {
-    pad: 20,
-    hudH: 64,
-
-    colW: 252,          // ancho de las columnas laterales
-    filaY: 84,          // borde superior de las columnas
-    filaB: 508,         // borde inferior de las columnas
-
-    mesaY: 520,         // mesa de ingredientes
-    mesaB: 748
+const PALETA = {
+    azul: 0x0077b6,
+    azulOscuro: 0x002244,
+    rojo: 0xe31837,
+    acero: 0xc3c9cd,
+    aceroOscuro: 0x596065,
+    encimera: 0x2b2f33,
+    pared: 0xe8e6e0,
+    techo: 0x1b1a18,
+    madera: 0xb07a45,
+    negro: 0x17171a
 };
 
-LAY.izqX = LAY.pad;                                  // 20
-LAY.derX = GAME_WIDTH - LAY.pad - LAY.colW;          // 1008
-LAY.filaH = LAY.filaB - LAY.filaY;                   // 424
-LAY.centroX = GAME_WIDTH / 2;                        // 640
-LAY.centroY = LAY.filaY + LAY.filaH / 2;             // 296
+/* ==========================================================================
+   2 · LAS 10 ESTACIONES
+   El campo "orden" es el paso real del flujo de trabajo: de que llega el
+   insumo a que sale la pizza. El panel lateral y el modo Reto lo respetan.
 
-// Paleta, derivada del azul institucional #002244 y el rojo #E31837.
-const C = {
-    night:     0x0d1b2a,
-    panel:     0x16293d,
-    panelSoft: 0x1e3a55,
-    line:      0x2d4f72,
-    red:       0xe31837,
-    redDeep:   0x9e1128,
-    blue:      0x2fa3e3,
-    blueDeep:  0x006491,
-    amber:     0xffb020,
-    ember:     0xff6a1f,
-    mint:      0x17c98a,
-    cream:     0xf3e9d6,
-    wood:      0xb0793c,
-    woodDark:  0x7d5327,
-    text:      0xf2f6fa,
-    muted:     0x8ba5c0,
-
-    // Tonos pensados para leerse sobre el panel #16293d. El rojo de marca
-    // sirve para rellenos, pero como texto chico se pierde contra el fondo
-    // oscuro: para eso está redText. Igual mutedHi releva a muted cuando el
-    // texto baja de 12 px.
-    redText:   0xff8fa3,
-    mutedHi:   0xc2d6e8
-};
-
-const H = (key) => "#" + C[key].toString(16).padStart(6, "0");
-
-// Tres roles tipográficos, todos con fuentes disponibles sin descargas.
-/* Los ingredientes se dibujan desde PNG de 256 px. El juego venía escalando
-   fichas de 32 px, así que ING_K devuelve cada sprite a ese tamaño en
-   pantalla: se ve exactamente igual de grande, pero con 8 veces más
-   resolución. Si algún día cambias los PNG de tamaño, ajusta ING_PX y
-   todo lo demás se acomoda solo. */
-const ING_PX = 256;
-const ING_K  = 32 / ING_PX;
-
-// Ingredientes con arte propio en recursos/texturas/ing/.
-// El queso no lleva PNG: en la pizza es una capa, no una pieza suelta.
-const SPRITES_ING = ["salsa", "pepperoni", "champinon", "pina",
-                     "jamon", "aceitunas", "pimiento"];
-
-const FONT_DISPLAY = '"Arial Black", "Haettenschweiler", Impact, sans-serif';
-const FONT_BODY    = '"Trebuchet MS", Arial, sans-serif';
-const FONT_TICKET  = '"Courier New", Courier, monospace';
-
-const REDUCED_MOTION = typeof window !== "undefined"
-    && window.matchMedia
-    && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-const MOTION = REDUCED_MOTION ? 0.35 : 1;
-
-/* ---------------------------------------------------------------------------
-   1b. NITIDEZ DEL TEXTO
-   Phaser dibuja cada texto en un canvas interno. Subiendo su "resolution" ese
-   canvas se genera al doble o triple y se muestra al tamaño correcto, así que
-   las letras no se ven suaves en pantallas HiDPI ni con Windows al 125%.
-   Se parchea la fábrica una sola vez para no tocar cada llamada.
---------------------------------------------------------------------------- */
-
-const DPR = (typeof window !== "undefined" && window.devicePixelRatio) || 1;
-const TEXT_RES = Math.min(Math.max(DPR, 2), 3);
-
-(function nitidezDeTexto() {
-    if (typeof Phaser === "undefined") return;
-    const F = Phaser.GameObjects.GameObjectFactory.prototype;
-    if (!F || typeof F.text !== "function" || F._resParcheada) return;
-    const original = F.text;
-    F.text = function (x, y, contenido, estilo) {
-        const e = Object.assign({}, estilo);
-        if (e.resolution === undefined) e.resolution = TEXT_RES;
-        return original.call(this, x, y, contenido, e);
-    };
-    F._resParcheada = true;
-})();
-
-/* ---------------------------------------------------------------------------
-   1c. MÚSICA DE FONDO  ← AQUÍ VA TU ARCHIVO
-   ---------------------------------------------------------------------------
-   1) Copia tu pista a la carpeta de audio del portal, por ejemplo:
-    js/../audio/cocina-loop.mp3   →  ../../audio/cocina-loop.mp3
-   2) Escribe esa ruta en `archivo`, abajo. Nada más.
-
-   Formatos: usa .mp3 o .ogg (los dos funcionan en todos los navegadores
-   modernos). Si quieres dar ambos, pon un arreglo: ["../../audio/x.ogg",
-   "../../audio/x.mp3"] — Phaser toma el primero que el navegador soporte.
-
-   La música arranca al presionar "Iniciar turno" (los navegadores exigen un
-   clic antes de reproducir audio), se repite sola y el botón 🔊 del juego la
-   silencia junto con los efectos. Si `archivo` queda vacío, el juego funciona
-   igual y simplemente no suena música.
---------------------------------------------------------------------------- */
-
-const MUSICA = {
-    archivo: "../../recursos/audio/hitslab-jazz-restaurant-cafe-music-334836.mp3",        // ← ej. "../../audio/cocina-loop.mp3"
-    volumen: 0.30,      // 0 a 1
-    sonido: null,
-
-    precargar(scene) {
-        if (!MUSICA.archivo) return;
-        scene.load.audio("musica_fondo", MUSICA.archivo);
+   pos      → [x, z] en metros
+   top      → altura útil de la estación (dónde aterriza la cámara y los props)
+   hitbox   → [ancho, alto, fondo] de la caja invisible que se puede clickear
+   ========================================================================== */
+const ESTACIONES = [
+    {
+        id: 'recepcion', orden: 1, nombre: 'Recepción y almacén', icono: 'bi-truck',
+        pos: [-4.5, 2.4], top: 0.85, hitbox: [1.5, 1.7, 1.6],
+        resumen: 'Es la puerta de entrada de todo lo que se usa en la tienda. Aquí bajan las cajas del camión, se revisan y se acomodan antes de guardarlas.',
+        tareas: [
+            'Contar lo que llegó contra la nota de remisión',
+            'Revisar fechas de caducidad caja por caja',
+            'Acomodar por PEPS: lo más viejo adelante, lo nuevo atrás',
+            'Todo sube a tarima, nada se queda en el piso'
+        ],
+        tip: 'Si una caja viene rota, mojada o abollada, no la metas al almacén. Repórtala al gerente en ese momento.'
     },
+    {
+        id: 'frio', orden: 2, nombre: 'Cámara fría', icono: 'bi-thermometer-snow',
+        pos: [4.85, -3.3], top: 1.0, hitbox: [1.2, 2.0, 1.0],
+        resumen: 'Guarda todo lo perecedero: masa, queso, salsas y toppings. Es el equipo más delicado de la cocina.',
+        tareas: [
+            'Registrar la temperatura al abrir y al cerrar el turno',
+            'Mantener entre 1 °C y 4 °C',
+            'Sacar solo la masa que vas a usar en la siguiente hora',
+            'Nunca dejar la puerta abierta mientras acomodas'
+        ],
+        tip: 'La masa necesita atemperarse antes de estirarse. Si sale directo del frío se rompe.'
+    },
+    {
+        id: 'estanteria', orden: 3, nombre: 'Estantería de secos', icono: 'bi-archive',
+        pos: [5.1, 0.3], top: 1.55, hitbox: [0.9, 2.0, 3.0],
+        resumen: 'Insumos que no necesitan frío: harina, latas de salsa, especias, servilletas y material de empaque.',
+        tareas: [
+            'Mantener las etiquetas viendo al frente para leerlas rápido',
+            'Lo pesado abajo, lo ligero arriba',
+            'Revisar el nivel de existencias antes de cada turno'
+        ],
+        tip: 'Deja siempre un dedo de espacio entre la repisa de arriba y los botes, o no vas a poder sacarlos con una mano.'
+    },
+    {
+        id: 'armado', orden: 4, nombre: 'Mesa de armado', icono: 'bi-egg-fried',
+        pos: [-0.3, -0.5], top: 0.92, hitbox: [2.2, 1.3, 1.4],
+        resumen: 'El corazón de la cocina, también llamada make line. Aquí se estira la masa, se pone la salsa, el queso y los ingredientes en el orden correcto.',
+        tareas: [
+            'Estirar la masa sin romper la orilla',
+            'Salsa en espiral desde el centro, dejando el borde limpio',
+            'Queso parejo, sin montones',
+            'Toppings en el orden de la receta, nunca al gusto'
+        ],
+        tip: 'Los botes de la barra de ingredientes están en el orden en que se usan. Si respetas ese orden no necesitas voltear a ver la receta.'
+    },
+    {
+        id: 'horno', orden: 5, nombre: 'Horno de banda', icono: 'bi-fire',
+        pos: [-1.9, -3.0], top: 1.45, hitbox: [1.9, 1.5, 1.6],
+        resumen: 'Horno transportador: la pizza entra por un lado y sale por el otro ya cocida. El tiempo lo controla la velocidad de la banda, no tú.',
+        tareas: [
+            'Verificar temperatura y velocidad al abrir',
+            'Meter la pizza centrada en la banda',
+            'No amontonar dos pizzas en el mismo tramo',
+            'Recibir la pizza a la salida, nunca dejarla caer'
+        ],
+        tip: 'Si la pizza sale pálida o quemada, el problema casi nunca es el horno: es la velocidad de la banda o el orden de entrada.'
+    },
+    {
+        id: 'campana', orden: 6, nombre: 'Campana extractora', icono: 'bi-wind',
+        pos: [-1.9, -3.0], top: 2.65, hitbox: [1.9, 0.9, 1.3],
+        resumen: 'Saca el humo, la grasa y el calor que produce el horno. Sin ella la cocina se vuelve inhabitable en minutos.',
+        tareas: [
+            'Encenderla antes que el horno, siempre',
+            'Revisar que los filtros estén puestos y limpios',
+            'Reportar cualquier ruido raro o vibración'
+        ],
+        tip: 'Filtro con grasa acumulada es la causa número uno de incendio en cocina. Se limpia por turno, no por semana.'
+    },
+    {
+        id: 'corte', orden: 7, nombre: 'Mesa de corte y empaque', icono: 'bi-scissors',
+        pos: [1.1, 2.1], top: 0.92, hitbox: [2.1, 1.3, 1.3],
+        resumen: 'La pizza sale del horno y aterriza aquí. Se corta, se revisa y se encaja para que salga presentable.',
+        tareas: [
+            'Cortar con el rodillo en un solo pase, sin serruchear',
+            'Revisar que las rebanadas queden parejas',
+            'Encajar de inmediato para que no pierda temperatura',
+            'Poner el sello y la etiqueta del pedido'
+        ],
+        tip: 'Antes de cerrar la caja, compárala con el ticket. Es el último punto donde se puede corregir un error.'
+    },
+    {
+        id: 'despacho', orden: 8, nombre: 'Mostrador de despacho', icono: 'bi-bag-check',
+        pos: [4.2, 2.6], top: 1.05, hitbox: [1.9, 1.5, 1.1],
+        resumen: 'El punto de salida. Aquí el repartidor recoge y el cliente de mostrador recibe su pedido.',
+        tareas: [
+            'Cotejar caja contra ticket antes de entregar',
+            'Cargar primero lo que sale más lejos',
+            'Mantener el mostrador despejado y limpio'
+        ],
+        tip: 'Nunca dejes una caja lista más de lo necesario en el rack. Cada minuto ahí es temperatura y sabor que se pierden.'
+    },
+    {
+        id: 'lavado', orden: 9, nombre: 'Zona de lavado', icono: 'bi-droplet-fill',
+        pos: [-4.95, -0.7], top: 0.8, hitbox: [1.0, 1.6, 1.5],
+        resumen: 'Charolas, utensilios y manos. Es la estación que sostiene la higiene de toda la cocina.',
+        tareas: [
+            'Lavarte las manos al entrar y cada vez que cambies de tarea',
+            'Tallar, enjuagar y desinfectar, en ese orden',
+            'Dejar escurrir la charola antes de volver a usarla'
+        ],
+        tip: 'Lávate las manos antes de tocar masa y cada vez que cambies de tarea. El letrero de arriba no es adorno.'
+    },
+    {
+        id: 'residuos', orden: 10, nombre: 'Higiene y residuos', icono: 'bi-trash3',
+        pos: [-4.8, -2.8], top: 0.55, hitbox: [1.2, 1.3, 1.3],
+        resumen: 'Bote de pedal, gel antibacterial y material de limpieza. Está lejos del armado a propósito.',
+        tareas: [
+            'Usar el pedal, nunca la tapa con la mano',
+            'Sacar la bolsa antes de que se desborde',
+            'Lavarte las manos después de tocar basura, sin excepción'
+        ],
+        tip: 'Fíjate qué tan lejos está esta estación de la mesa de armado. Esa distancia no es casualidad.'
+    }
+];
 
-    iniciar(scene) {
-        if (!MUSICA.archivo || MUSICA.sonido) return;
-        if (!scene.cache.audio.exists("musica_fondo")) return;
-        try {
-            MUSICA.sonido = scene.sound.add("musica_fondo", {
-                loop: true,
-                volume: MUSICA.volumen
-            });
-            MUSICA.sonido.play();
-            MUSICA.sonido.setMute(SFX.muted);
-        } catch (e) {
-            MUSICA.sonido = null;
+const porId = (id) => ESTACIONES.find(e => e.id === id);
+
+/* ==========================================================================
+   3 · MODO RETO
+   ========================================================================== */
+const PREGUNTAS = [
+    { texto: 'Acaba de llegar el camión con insumos. ¿A dónde los llevas?', id: 'recepcion' },
+    { texto: '¿Dónde se guardan la masa y el queso?', id: 'frio' },
+    { texto: 'Se acabaron las latas de salsa. ¿Dónde buscas el repuesto?', id: 'estanteria' },
+    { texto: '¿Dónde estiras la masa y colocas los ingredientes?', id: 'armado' },
+    { texto: 'La pizza ya está armada. ¿Cuál es el siguiente paso?', id: 'horno' },
+    { texto: 'La cocina se está llenando de humo. ¿Qué equipo revisas primero?', id: 'campana' },
+    { texto: 'La pizza salió del horno. ¿Dónde la cortas y la encajas?', id: 'corte' },
+    { texto: 'El repartidor viene por su pedido. ¿Dónde lo recoge?', id: 'despacho' },
+    { texto: 'Vas a empezar tu turno. ¿Dónde te lavas las manos?', id: 'lavado' },
+    { texto: 'Se te cayó una caja de cartón al piso. ¿Dónde la tiras?', id: 'residuos' },
+    { texto: '¿Dónde revisas las fechas de caducidad de la mercancía nueva?', id: 'recepcion' },
+    { texto: '¿Dónde debes registrar la temperatura al cerrar el turno?', id: 'frio' }
+];
+
+/* ==========================================================================
+   4 · ESTADO
+   ========================================================================== */
+let scene, renderer, camara, contenedor, ancho, alto;
+let luzHorno, tiempoHorno = 0;
+
+let hitboxes = [];
+let marcadores = new Map();   // id -> anillo del piso
+let estacionActiva = null;
+
+let modo = 'explorar';        // explorar | recorrido | reto
+
+// Cámara orbital
+const VISTA_GENERAL = { pos: new Vector3(-4.2, 5.2, 9.0), target: new Vector3(0, 0.9, -0.4) };
+let orbitTarget = VISTA_GENERAL.target.clone();
+let orbitTheta = 0, orbitPhi = 1.05, orbitRadius = 9;
+const RADIO_MIN = 1.2, RADIO_MAX = 18;
+let camAnim = null;
+
+// Recorrido en primera persona
+const FP = {
+    pos: new Vector3(0, 1.62, 3.0),
+    yaw: Math.PI,
+    pitch: -0.05,
+    velocidad: 2.7,
+    radio: 0.34,
+    teclas: Object.create(null)
+};
+const OBSTACULOS = [];        // AABB en planta: {x0, z0, x1, z1}
+
+// Puntero
+let punteroBloqueado = false;   // true cuando el mouse está capturado (recorrido)
+let btnPantalla, mira;
+let arrastrando = false;
+let ultimoPuntero = { x: 0, y: 0 };
+let inicioPuntero = { x: 0, y: 0 };
+const raycaster = new Raycaster();
+const puntero = new Vector2();
+
+// Reto
+const reto = { orden: [], indice: 0, aciertos: 0, intentos: 0, activo: false, bloqueado: false };
+
+// Comida sobre la mesa de armado
+// Minimapa
+let mapaCanvas, mapaCtx;
+
+// DOM
+let elLista, elDetalle, elBtnVista, elHint, elChips, elReto;
+let overlay, overlayBarra;
+
+let reloj = performance.now();
+
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+
+/* ==========================================================================
+   5 · CARGA
+   ========================================================================== */
+const manager = new LoadingManager();
+let recursosFallidos = 0;
+
+manager.onProgress = (url, cargados, total) => {
+    if (!overlayBarra) return;
+    overlayBarra.style.width = Math.round((cargados / Math.max(total, 1)) * 100) + '%';
+};
+manager.onError = (url) => {
+    recursosFallidos++;
+    console.warn('[entorno-3d] no cargó:', url);
+};
+manager.onLoad = () => cerrarOverlay();
+
+function cerrarOverlay() {
+    if (!overlay || overlay.dataset.cerrado) return;
+    overlay.dataset.cerrado = '1';
+    if (overlayBarra) overlayBarra.style.width = '100%';
+    overlay.style.opacity = '0';
+    setTimeout(() => { overlay.style.display = 'none'; }, 320);
+    if (recursosFallidos > 0) {
+        console.warn(`[entorno-3d] ${recursosFallidos} recurso(s) no cargaron. La escena se muestra igual.`);
+    }
+}
+
+/* ==========================================================================
+   6 · INIT
+   ========================================================================== */
+function init() {
+    contenedor = document.getElementById('scene-container');
+    if (!contenedor) { console.error('[entorno-3d] falta #scene-container'); return; }
+
+    ancho = contenedor.clientWidth;
+    alto = contenedor.clientHeight || 600;
+
+    crearOverlay();
+
+    scene = new Scene();
+    scene.background = new Color(0x0b0d10);
+    scene.fog = new Fog(0x0b0d10, 18, 38);
+
+    renderer = new WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = PCFSoftShadowMap;
+    renderer.outputColorSpace = SRGBColorSpace;
+    renderer.toneMapping = ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.05;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.setSize(ancho, alto);
+    contenedor.appendChild(renderer.domElement);
+
+    camara = new PerspectiveCamera(55, ancho / alto, 0.05, 120);
+    camara.position.copy(VISTA_GENERAL.pos);
+    camara.lookAt(VISTA_GENERAL.target);
+    sincronizarOrbita(VISTA_GENERAL.pos, VISTA_GENERAL.target);
+
+    ponerLuces();
+    construirCocina();
+    crearHitboxes();
+    registrarObstaculos();
+
+    const draco = new DRACOLoader(manager);
+    draco.setDecoderPath('../../js/draco/');
+    const gltf = new GLTFLoader(manager);
+    gltf.setDRACOLoader(draco);
+
+    cargarEquipoDeCocina(gltf);
+    cargarUtensilios(gltf);
+    cargarComida(gltf);
+
+    construirInterfaz();
+    conectarEventos();
+
+    // Red de seguridad: si un .glb tarda demasiado o no existe, la pantalla
+    // de carga no debe quedarse encima de la escena para siempre.
+    setTimeout(cerrarOverlay, 12000);
+
+    onResize();
+}
+
+function crearOverlay() {
+    overlay = document.createElement('div');
+    overlay.className = 'scene-loading';
+    overlay.style.transition = 'opacity .3s ease';
+    overlay.innerHTML = `
+        <div class="scene-loading-label">Construyendo la cocina…</div>
+        <div class="scene-loading-track"><div class="scene-loading-fill"></div></div>`;
+    contenedor.appendChild(overlay);
+    overlayBarra = overlay.querySelector('.scene-loading-fill');
+}
+
+function ponerLuces() {
+    scene.add(new HemisphereLight(0xfff4e2, 0x2a2622, 0.75));
+
+    const sol = new DirectionalLight(0xfff2dc, 1.15);
+    sol.position.set(4.5, 8, 5);
+    sol.castShadow = true;
+    sol.shadow.mapSize.set(2048, 2048);
+    sol.shadow.camera.left = -7;
+    sol.shadow.camera.right = 7;
+    sol.shadow.camera.top = 6;
+    sol.shadow.camera.bottom = -6;
+    sol.shadow.camera.far = 24;
+    sol.shadow.bias = -0.0004;
+    scene.add(sol);
+
+    // Cuatro plafones. Más luces puntuales que esto empiezan a costar fps.
+    [[-3.2, -1.6], [1.2, -1.6], [-3.2, 1.8], [1.2, 1.8]].forEach(([x, z]) => {
+        const luz = new PointLight(0xfff1d9, 22, 9, 2);
+        luz.position.set(x, 2.85, z);
+        scene.add(luz);
+    });
+
+    luzHorno = new PointLight(0xff7a30, 9, 5.5, 2);
+    luzHorno.position.set(-1.9, 1.15, -2.15);
+    scene.add(luzHorno);
+}
+
+/* ==========================================================================
+   7 · TEXTURAS
+   ========================================================================== */
+const texLoader = new TextureLoader(manager);
+
+function cargarTextura(ruta, repX = 1, repY = 1) {
+    const t = texLoader.load(ruta);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.repeat.set(repX, repY);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+}
+
+function texturaProp(ruta) {
+    const t = texLoader.load(ruta);
+    t.flipY = false;
+    t.colorSpace = SRGBColorSpace;
+    return t;
+}
+
+/** Azulejo blanco de cocina dibujado en un canvas: pesa cero y se ve limpio. */
+function texturaAzulejo() {
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#e9e7e1'; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = '#cfccc4'; g.lineWidth = 5;
+    for (let i = 0; i <= 256; i += 64) {
+        g.beginPath(); g.moveTo(i, 0); g.lineTo(i, 256); g.stroke();
+        g.beginPath(); g.moveTo(0, i); g.lineTo(256, i); g.stroke();
+    }
+    const t = new CanvasTexture(c);
+    t.wrapS = t.wrapT = RepeatWrapping;
+    t.colorSpace = SRGBColorSpace;
+    return t;
+}
+
+/** Letrero de la tienda, también dibujado a mano para no cargar el PNG de 3840px. */
+function texturaLetrero() {
+    const c = document.createElement('canvas');
+    c.width = 1024; c.height = 256;
+    const g = c.getContext('2d');
+    g.fillStyle = '#002244'; g.fillRect(0, 0, 1024, 256);
+    g.fillStyle = '#e31837'; g.fillRect(0, 210, 1024, 46);
+    // Ficha de dominó
+    g.fillStyle = '#ffffff';
+    g.fillRect(64, 60, 150, 96);
+    g.fillStyle = '#e31837'; g.fillRect(64, 60, 75, 96);
+    g.fillStyle = '#0077b6'; g.fillRect(139, 60, 75, 96);
+    g.fillStyle = '#ffffff';
+    [[96, 88], [96, 128], [175, 108]].forEach(([x, y]) => {
+        g.beginPath(); g.arc(x, y, 11, 0, Math.PI * 2); g.fill();
+    });
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 78px Arial, sans-serif';
+    g.fillText('COCINA', 260, 118);
+    g.fillStyle = '#9fb6cc';
+    g.font = 'bold 34px Arial, sans-serif';
+    g.fillText('ÁREA DE PRODUCCIÓN', 262, 170);
+    const t = new CanvasTexture(c);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+}
+
+/** Estampa del ingrediente: el PNG 2D que va debajo de cada nombre. */
+function texturaEtiqueta(clave) {
+    const t = texLoader.load(`../../recursos/texturas/etiquetas/${clave}.png`);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+}
+
+/** Etiqueta de texto para los botes de la barra de ingredientes. */
+function etiqueta(texto, fondo = '#002244') {
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    const g = c.getContext('2d');
+    g.fillStyle = fondo; g.fillRect(0, 0, 256, 64);
+    g.fillStyle = '#ffffff';
+    g.font = 'bold 30px Arial, sans-serif';
+    g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(texto.toUpperCase(), 128, 34);
+    const t = new CanvasTexture(c);
+    t.colorSpace = SRGBColorSpace;
+    return t;
+}
+
+/* ==========================================================================
+   8 · CONSTRUCCIÓN DE LA COCINA
+   ========================================================================== */
+function mat(color, rough = 0.7, metal = 0) {
+    return new MeshStandardMaterial({ color, roughness: rough, metalness: metal });
+}
+
+function caja(w, h, d, material, x, y, z, sombra = true) {
+    const m = new Mesh(new BoxGeometry(w, h, d), material);
+    m.position.set(x, y, z);
+    m.castShadow = sombra;
+    m.receiveShadow = true;
+    scene.add(m);
+    return m;
+}
+
+function construirCocina() {
+    const matAcero = mat(PALETA.acero, 0.3, 0.72);
+    const matAceroOscuro = mat(PALETA.aceroOscuro, 0.38, 0.65);
+    const matEncimera = mat(PALETA.encimera, 0.5, 0.12);
+    const matMadera = mat(PALETA.madera, 0.7);
+    const matNegro = mat(PALETA.negro, 0.6, 0.2);
+    const matRojo = mat(PALETA.rojo, 0.6);
+
+    /* --- Piso: usa tu textura real, repetida para que no se vea estirada --- */
+    const piso = new Mesh(
+        new PlaneGeometry(COCINA.ancho, COCINA.fondo),
+        new MeshStandardMaterial({ map: cargarTextura('../../images/piso_cocina.jpeg', 6, 4), roughness: 0.8, metalness: 0.05 })
+    );
+    piso.rotation.x = -Math.PI / 2;
+    piso.receiveShadow = true;
+    scene.add(piso);
+
+    /* --- Techo --- */
+    const techo = new Mesh(new PlaneGeometry(COCINA.ancho, COCINA.fondo), mat(PALETA.techo, 0.9));
+    techo.position.y = COCINA.alto;
+    techo.rotation.x = Math.PI / 2;
+    scene.add(techo);
+
+    /* --- Plafones de luz (solo visual, las luces reales ya están puestas) --- */
+    const matPlafon = new MeshStandardMaterial({ color: 0xfff8ea, emissive: 0xfff0d2, emissiveIntensity: 1.4 });
+    [-3.2, 1.2].forEach(x => {
+        [-1.6, 1.8].forEach(z => {
+            const p = new Mesh(new BoxGeometry(1.5, 0.06, 0.35), matPlafon);
+            p.position.set(x, COCINA.alto - 0.07, z);
+            scene.add(p);
+        });
+    });
+
+    /* --- Paredes con azulejo + franja roja de marca --- */
+    const paredes = [
+        { w: COCINA.ancho, x: 0, z: -LIM_Z, rot: 0, rep: [11, 3] },
+        { w: COCINA.ancho, x: 0, z: LIM_Z, rot: Math.PI, rep: [11, 3] },
+        { w: COCINA.fondo, x: -LIM_X, z: 0, rot: Math.PI / 2, rep: [8, 3] },
+        { w: COCINA.fondo, x: LIM_X, z: 0, rot: -Math.PI / 2, rep: [8, 3] }
+    ];
+    paredes.forEach(p => {
+        const tex = texturaAzulejo();
+        tex.repeat.set(p.rep[0], p.rep[1]);
+        const m = new Mesh(new PlaneGeometry(p.w, COCINA.alto), new MeshStandardMaterial({ map: tex, roughness: 0.85 }));
+        m.position.set(p.x, COCINA.alto / 2, p.z);
+        m.rotation.y = p.rot;
+        m.receiveShadow = true;
+        scene.add(m);
+
+        // Franja roja a la altura de la vista
+        const franja = new Mesh(new PlaneGeometry(p.w, 0.16), matRojo);
+        franja.position.set(p.x, 1.35, p.z);
+        franja.rotation.y = p.rot;
+        franja.position.add(new Vector3(Math.sin(p.rot), 0, Math.cos(p.rot)).multiplyScalar(0.012));
+        scene.add(franja);
+    });
+
+    /* --- Zoclo sanitario de acero --- */
+    caja(COCINA.ancho, 0.14, 0.06, matAceroOscuro, 0, 0.07, -LIM_Z + 0.03, false);
+    caja(COCINA.ancho, 0.14, 0.06, matAceroOscuro, 0, 0.07, LIM_Z - 0.03, false);
+    caja(0.06, 0.14, COCINA.fondo, matAceroOscuro, -LIM_X + 0.03, 0.07, 0, false);
+    caja(0.06, 0.14, COCINA.fondo, matAceroOscuro, LIM_X - 0.03, 0.07, 0, false);
+
+    /* --- Letrero sobre la pared del fondo --- */
+    const letrero = new Mesh(
+        new PlaneGeometry(2.8, 0.7),
+        new MeshStandardMaterial({ map: texturaLetrero(), roughness: 0.6, emissive: 0x14243a, emissiveIntensity: 0.35 })
+    );
+    letrero.position.set(1.9, 2.45, -LIM_Z + 0.02);
+    scene.add(letrero);
+
+    /* --- Ventana de despacho en la pared del frente --- */
+    const marco = caja(2.0, 1.15, 0.08, matAceroOscuro, 4.2, 1.85, LIM_Z - 0.04, false);
+    marco.receiveShadow = false;
+    const vidrio = new Mesh(
+        new PlaneGeometry(1.82, 0.98),
+        new MeshStandardMaterial({ color: 0xbfe3e0, roughness: 0.06, metalness: 0.1, transparent: true, opacity: 0.28, side: DoubleSide })
+    );
+    vidrio.position.set(4.2, 1.85, LIM_Z - 0.09);
+    scene.add(vidrio);
+
+    construirArmado(matAcero, matEncimera, matAceroOscuro);
+    construirBandaHorno(matAcero, matAceroOscuro, matNegro);
+    construirCorte(matAcero, matEncimera);
+    construirDespacho(matAcero, matAceroOscuro, matEncimera);
+    construirEstanteria(matMadera, matAcero);
+    construirRecepcion();
+    construirLavado(matAcero);
+    construirResiduos();
+    construirMesaAuxiliar(matAcero, matEncimera);
+    construirDetalles(matNegro);
+    crearMarcadoresDePiso();
+}
+
+/* --- 4 · Mesa de armado con barra de ingredientes ------------------------ */
+function construirArmado(matAcero, matEncimera, matAceroOscuro) {
+    const st = porId('armado');
+    const [x, z] = st.pos;
+
+    // Base y cubierta de acero
+    caja(2.0, st.top - 0.08, 1.0, matEncimera, x, (st.top - 0.08) / 2, z);
+    caja(2.1, 0.08, 1.1, matAcero, x, st.top - 0.04, z);
+
+    // Entrepaño inferior con charolas
+    caja(1.9, 0.04, 0.85, matAceroOscuro, x, 0.22, z, false);
+
+    // Barra refrigerada de ingredientes, pegada al lado del horno
+    const barraZ = z - 0.62;
+    caja(2.1, 0.32, 0.42, matAcero, x, st.top + 0.12, barraZ);
+
+    /* El campo `arte` es el PNG de recursos/texturas/etiquetas/. Va DEBAJO
+       del nombre, como la calcomanía que traen los botes en tienda: el
+       empleado nuevo reconoce el dibujo antes de alcanzar a leer. */
+    const ingredientes = [
+        { nombre: 'Salsa', arte: 'salsa', color: 0xb02a1c },
+        { nombre: 'Queso', arte: 'queso', color: 0xf2d98a },
+        { nombre: 'Pepperoni', arte: 'pepperoni', color: 0xa8342c },
+        { nombre: 'Jamón', arte: 'jamon', color: 0xe39a94 },
+        { nombre: 'Champiñón', arte: 'champinon', color: 0xd8cbb4 },
+        { nombre: 'Pimiento', arte: 'pimiento', color: 0x3f7d3a }
+    ];
+
+    const frente = barraZ + 0.212;   // cara delantera de la barra
+
+    ingredientes.forEach((ing, i) => {
+        const bx = x - 0.9 + i * 0.36;
+        const bote = new Mesh(new BoxGeometry(0.31, 0.16, 0.31), matAcero);
+        bote.position.set(bx, st.top + 0.32, barraZ);
+        bote.castShadow = true;
+        scene.add(bote);
+
+        const contenido = new Mesh(new BoxGeometry(0.26, 0.05, 0.26), mat(ing.color, 0.85));
+        contenido.position.set(bx, st.top + 0.38, barraZ);
+        scene.add(contenido);
+
+        // Nombre, un poco más arriba para dejarle sitio a la estampa.
+        const et = new Mesh(
+            new PlaneGeometry(0.3, 0.07),
+            new MeshStandardMaterial({ map: etiqueta(ing.nombre), roughness: 0.7 })
+        );
+        et.position.set(bx, st.top + 0.215, frente);
+        scene.add(et);
+
+        /* Estampa del ingrediente, justo debajo del nombre.
+           transparent + alphaTest recorta el fondo del PNG; sin alphaTest el
+           recorte pelea con el orden de dibujado y deja un halo alrededor. */
+        const estampa = new Mesh(
+            new PlaneGeometry(0.13, 0.13),
+            new MeshStandardMaterial({
+                map: texturaEtiqueta(ing.arte),
+                roughness: 0.85,
+                transparent: true,
+                alphaTest: 0.35
+            })
+        );
+        estampa.position.set(bx, st.top + 0.105, frente + 0.001);
+        scene.add(estampa);
+    });
+
+    // Aquí iba un harinero (el cilindro blanco de la esquina). Se quitó: no
+    // se usaba para nada y solo tapaba la vista de la mesa.
+
+    // Monitor de pedidos colgado
+    const cable = new Mesh(new CylinderGeometry(0.012, 0.012, 0.78, 8), mat(PALETA.negro, 0.6));
+    cable.position.set(x, 2.73, z);
+    scene.add(cable);
+    caja(0.62, 0.38, 0.05, mat(PALETA.negro, 0.4, 0.3), x, 2.15, z);
+    const pantalla = new Mesh(
+        new PlaneGeometry(0.56, 0.32),
+        new MeshStandardMaterial({ color: 0x0d2b45, emissive: 0x0077b6, emissiveIntensity: 0.75 })
+    );
+    pantalla.position.set(x, 2.15, z + 0.03);
+    scene.add(pantalla);
+}
+
+/* --- 5 · Banda de salida del horno --------------------------------------- */
+function construirBandaHorno(matAcero, matAceroOscuro, matNegro) {
+    const st = porId('horno');
+    const [x, z] = st.pos;
+
+    // Banda transportadora saliendo hacia la mesa de armado
+    const banda = caja(1.5, 0.05, 1.0, matNegro, x + 0.05, 0.88, z + 1.15);
+    banda.receiveShadow = true;
+    caja(1.55, 0.5, 0.06, matAceroOscuro, x + 0.05, 0.63, z + 1.62, false);
+
+    // Rodillos
+    for (let i = 0; i < 5; i++) {
+        const r = new Mesh(new CylinderGeometry(0.035, 0.035, 1.5, 12), matAcero);
+        r.rotation.z = Math.PI / 2;
+        r.position.set(x + 0.05, 0.92, z + 0.75 + i * 0.2);
+        scene.add(r);
+    }
+    // Patas
+    [[-0.6, 0.75], [0.7, 0.75], [-0.6, 1.55], [0.7, 1.55]].forEach(([dx, dz]) => {
+        const p = new Mesh(new CylinderGeometry(0.03, 0.03, 0.88, 8), matAceroOscuro);
+        p.position.set(x + 0.05 + dx, 0.44, z + dz);
+        scene.add(p);
+    });
+
+    // Boca del horno: rectángulo naranja que sugiere el calor de adentro
+    const boca = new Mesh(
+        new PlaneGeometry(1.1, 0.22),
+        new MeshBasicMaterial({ color: 0xff7a2a })
+    );
+    boca.position.set(x, 1.02, z + 0.84);
+    scene.add(boca);
+}
+
+/* --- 7 · Mesa de corte y empaque ----------------------------------------- */
+function construirCorte(matAcero, matEncimera) {
+    const st = porId('corte');
+    const [x, z] = st.pos;
+    caja(1.9, st.top - 0.08, 1.0, matEncimera, x, (st.top - 0.08) / 2, z);
+    caja(2.0, 0.08, 1.1, matAcero, x, st.top - 0.04, z);
+
+    // Aquí iba una repisa alta con cajas. Se quitó: colgaba en el aire sin
+    // soportes y no aportaba nada. Las cajas para encajar viven sobre la
+    // mesa, que es donde se alcanzan.
+
+    // Entrepaño bajo, este sí apoyado en la propia mesa.
+    caja(1.75, 0.04, 0.8, matAcero, x, 0.26, z, false);
+}
+
+/* --- 8 · Mostrador de despacho con rack caliente -------------------------- */
+function construirDespacho(matAcero, matAceroOscuro, matEncimera) {
+    const st = porId('despacho');
+    const [x, z] = st.pos;
+    caja(1.8, st.top - 0.06, 0.9, matEncimera, x, (st.top - 0.06) / 2, z);
+    caja(1.9, 0.06, 1.0, matAcero, x, st.top - 0.03, z);
+
+    // Rack de tres niveles con lámpara de calor
+    [0, 1, 2].forEach(i => {
+        caja(1.6, 0.04, 0.7, matAcero, x, st.top + 0.32 + i * 0.34, z, false);
+    });
+    [[-0.78, -0.32], [0.78, -0.32], [-0.78, 0.32], [0.78, 0.32]].forEach(([dx, dz]) => {
+        const p = new Mesh(new CylinderGeometry(0.022, 0.022, 1.08, 8), matAceroOscuro);
+        p.position.set(x + dx, st.top + 0.56, z + dz);
+        scene.add(p);
+    });
+    const lampara = new Mesh(
+        new BoxGeometry(1.5, 0.05, 0.2),
+        new MeshStandardMaterial({ color: 0xffb066, emissive: 0xff8a3c, emissiveIntensity: 1.2 })
+    );
+    lampara.position.set(x, st.top + 1.28, z);
+    scene.add(lampara);
+}
+
+/* --- 3 · Estantería de secos ---------------------------------------------- */
+function construirEstanteria(matMadera, matAcero) {
+    const st = porId('estanteria');
+    const [x, z] = st.pos;
+
+    for (let i = 0; i < 4; i++) {
+        const y = 0.35 + i * 0.55;
+        caja(0.55, 0.05, 2.8, matMadera, x, y, z);
+        for (let j = 0; j < 5; j++) {
+            const bote = new Mesh(new CylinderGeometry(0.11, 0.11, 0.26, 14), matAcero);
+            bote.position.set(x, y + 0.16, z - 1.15 + j * 0.58);
+            bote.castShadow = true;
+            scene.add(bote);
+            const tapa = new Mesh(new CylinderGeometry(0.115, 0.115, 0.02, 14), mat(PALETA.azul, 0.6));
+            tapa.position.set(x, y + 0.3, z - 1.15 + j * 0.58);
+            scene.add(tapa);
         }
-    },
-
-    silenciar(valor) {
-        if (MUSICA.sonido) MUSICA.sonido.setMute(valor);
     }
+    // Postes
+    [-1.4, 1.4].forEach(dz => {
+        const p = new Mesh(new CylinderGeometry(0.035, 0.035, 2.1, 8), matAcero);
+        p.position.set(x, 1.05, z + dz);
+        scene.add(p);
+    });
+}
+
+/* --- 1 · Recepción -------------------------------------------------------- */
+function construirRecepcion() {
+    const st = porId('recepcion');
+    const [x, z] = st.pos;
+
+    // El palet, el patín y las cajas ahora son modelos reales (ver la
+    // sección 10). Aquí solo queda el señalamiento de piso que delimita
+    // la zona de descarga: eso sí conviene dibujarlo, porque en tienda va
+    // pintado en el suelo y marca dónde NO estorbar.
+    const franja = new Mesh(
+        new PlaneGeometry(1.7, 1.7),
+        new MeshStandardMaterial({ color: 0xf0a020, roughness: 0.9, transparent: true, opacity: 0.22 })
+    );
+    franja.rotation.x = -Math.PI / 2;
+    franja.position.set(x, 0.006, z);
+    franja.receiveShadow = true;
+    scene.add(franja);
+}
+
+/* --- 9 · Lavado: pegado al muro izquierdo, bajo su letrero ---------------- */
+function construirLavado(matAcero) {
+    const z = porId('lavado').pos[1];
+    const muro = -LIM_X;
+
+    // El letrero vive con el lavamanos, que es donde tiene sentido leerlo.
+    const cartel = new Mesh(
+        new PlaneGeometry(0.8, 0.2),
+        new MeshStandardMaterial({ map: etiqueta('Lava tus manos', '#0077b6'), roughness: 0.7 })
+    );
+    cartel.position.set(muro + 0.03, 1.78, z);
+    cartel.rotation.y = Math.PI / 2;
+    scene.add(cartel);
+
+    // Escurridor de pared, al lado del mueble
+    caja(0.35, 0.04, 0.9, matAcero, muro + 0.2, 1.55, z + 0.9);
+
+    // Dispensador de jabón
+    caja(0.1, 0.26, 0.12, mat(0xf2f4f6, 0.6), muro + 0.08, 1.02, z - 0.52, true);
+
+    // Tapete antifatiga, justo donde te paras a lavar
+    const tapete = new Mesh(new PlaneGeometry(1.0, 1.1), mat(0x2f2b26, 0.95));
+    tapete.rotation.x = -Math.PI / 2;
+    tapete.position.set(muro + 1.15, 0.008, z);
+    tapete.receiveShadow = true;
+    scene.add(tapete);
+}
+
+/* --- 10 · Residuos e higiene: al fondo del muro izquierdo ----------------- */
+function construirResiduos() {
+    const z = porId('residuos').pos[1];
+    const muro = -LIM_X;
+
+    // Dispensador de gel, por encima de la franja roja para que se vea
+    caja(0.12, 0.3, 0.16, mat(0xf2f4f6, 0.6), muro + 0.09, 1.68, z, true);
+    const gota = new Mesh(new SphereGeometry(0.05, 12, 10), mat(0x9ad7f0, 0.3));
+    gota.position.set(muro + 0.09, 1.5, z);
+    scene.add(gota);
+}
+
+/* --- Mesa auxiliar del fondo (relleno del hueco entre horno y cámara) ----- */
+function construirMesaAuxiliar(matAcero, matEncimera) {
+    caja(2.4, 0.84, 0.7, matEncimera, 1.5, 0.42, -3.25);
+    caja(2.5, 0.06, 0.8, matAcero, 1.5, 0.87, -3.25);
+    caja(2.3, 0.04, 0.6, matAcero, 1.5, 0.28, -3.25, false);
+}
+
+/* --- Detalles sueltos ----------------------------------------------------- */
+function construirDetalles(matNegro) {
+    // Tapete de entrada
+    const tapete = new Mesh(new PlaneGeometry(1.4, 0.9), mat(0x24262a, 0.95));
+    tapete.rotation.x = -Math.PI / 2;
+    tapete.position.set(-0.3, 0.008, 3.1);
+    tapete.receiveShadow = true;
+    scene.add(tapete);
+
+    // Reloj checador
+    caja(0.28, 0.34, 0.08, matNegro, -0.3, 1.6, LIM_Z - 0.05, true);
+}
+
+/* --- Anillos en el piso que numeran el flujo de trabajo ------------------- */
+function crearMarcadoresDePiso() {
+    ESTACIONES.forEach(st => {
+        const anillo = new Mesh(
+            new TorusGeometry(0.5, 0.035, 8, 40),
+            new MeshBasicMaterial({ color: PALETA.azul, transparent: true, opacity: 0.32 })
+        );
+        anillo.rotation.x = -Math.PI / 2;
+        anillo.position.set(st.pos[0], 0.02, st.pos[1]);
+        scene.add(anillo);
+        marcadores.set(st.id, anillo);
+    });
+}
+
+/* ==========================================================================
+   9 · NORMALIZAR Y COLOCAR MODELOS
+   Cada .glb viene en su propia escala y con su propio centro. Estas dos
+   funciones los dejan siempre con la base en Y=0 y centrados en X/Z, para
+   poder colocarlos con coordenadas reales de la cocina.
+   ========================================================================== */
+function normalizar(objeto, tamano, eje = 'max', escalaFija = null) {
+    const modelo = clonarConEsqueleto(objeto);
+    modelo.updateMatrixWorld(true);
+
+    const bb = new Box3().setFromObject(modelo);
+    const tam = bb.getSize(new Vector3());
+    const centro = bb.getCenter(new Vector3());
+
+    let escala = escalaFija;
+    if (escala == null) {
+        const dim = eje === 'y' ? tam.y
+            : eje === 'x' ? tam.x
+                : eje === 'z' ? tam.z
+                    : Math.max(tam.x, tam.y, tam.z);
+        escala = tamano / (dim || 1);
+    }
+
+    modelo.position.sub(new Vector3(centro.x, bb.min.y, centro.z));
+
+    const envoltura = new Group();
+    envoltura.add(modelo);
+    envoltura.scale.setScalar(escala);
+    envoltura.traverse(o => {
+        if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; }
+    });
+    return envoltura;
+}
+
+/** Saca una pieza suelta de un .glb que trae varias (rodillo, cortador, caja…). */
+function extraerPieza(raiz, nombre, tamano, eje = 'max') {
+    raiz.updateMatrixWorld(true);
+    const nodo = raiz.getObjectByName(nombre);
+    if (!nodo) { console.warn('[entorno-3d] pieza no encontrada:', nombre); return null; }
+    const clon = nodo.clone(true);
+    clon.matrix.copy(nodo.matrixWorld);
+    clon.matrix.decompose(clon.position, clon.quaternion, clon.scale);
+    return normalizar(clon, tamano, eje);
+}
+
+/** Si un .glb no carga, dejamos un bloque gris en su lugar para que se note. */
+function marcadorFaltante(w, h, d, x, z, etiquetaTexto) {
+    const m = caja(w, h, d, mat(0x8a8f94, 0.9), x, h / 2, z);
+    m.userData.faltante = etiquetaTexto;
+    return m;
+}
+
+/** Encaja el modelo contra dos muros. sx/sz valen 1 o -1 y dicen a qué
+ *  esquina va: (1, -1) es la esquina derecha del fondo. Se mide después de
+ *  girar, para que quede a ras aunque haya cambiado de lado. */
+function acomodarEnEsquina(modelo, sx, sz, margen = 0.05) {
+    modelo.updateMatrixWorld(true);
+    const bb = new Box3().setFromObject(modelo);
+    const tam = bb.getSize(new Vector3());
+    const centro = bb.getCenter(new Vector3());
+
+    const destinoX = sx > 0 ? LIM_X - margen - tam.x / 2 : -LIM_X + margen + tam.x / 2;
+    const destinoZ = sz > 0 ? LIM_Z - margen - tam.z / 2 : -LIM_Z + margen + tam.z / 2;
+
+    modelo.position.x += destinoX - centro.x;
+    modelo.position.z += destinoZ - centro.z;
+    modelo.updateMatrixWorld(true);
+
+    return { x: destinoX, z: destinoZ, ancho: tam.x, fondo: tam.z };
+}
+
+/** Recarga el modelo contra un muro lateral sin cambiar su coordenada Z.
+ *  sx vale -1 para el muro izquierdo y 1 para el derecho. */
+function acomodarEnPared(modelo, sx, z, margen = 0.04) {
+    modelo.updateMatrixWorld(true);
+    const bb = new Box3().setFromObject(modelo);
+    const tam = bb.getSize(new Vector3());
+    const centro = bb.getCenter(new Vector3());
+
+    const destinoX = sx > 0 ? LIM_X - margen - tam.x / 2 : -LIM_X + margen + tam.x / 2;
+
+    modelo.position.x += destinoX - centro.x;
+    modelo.position.z += z - centro.z;
+    modelo.updateMatrixWorld(true);
+
+    return { x: destinoX, z, ancho: tam.x, fondo: tam.z };
+}
+
+/** Ajusta solo la caja de colisión de una estación, dejando su anillo y su
+ *  ficha donde están (el anillo se ve mejor centrado en el piso libre). */
+function obstaculoDe(id, x, z, ancho, fondo) {
+    const obs = OBSTACULOS.find(o => o.id === id);
+    if (!obs) return;
+    obs.x0 = x - ancho / 2; obs.x1 = x + ancho / 2;
+    obs.z0 = z - fondo / 2; obs.z1 = z + fondo / 2;
+}
+
+/** Reubica una estación completa: ficha, anillo del piso, zona clickeable,
+ *  colisión del recorrido y punto del minimapa, todo de un jalón. */
+function moverEstacion(id, x, z, ancho, fondo) {
+    const st = porId(id);
+    if (!st) return;
+    st.pos[0] = x;
+    st.pos[1] = z;
+
+    const zona = hitboxes.find(h => h.userData.estacion === id);
+    if (zona) zona.position.set(x, st.top, z);
+
+    const anillo = marcadores.get(id);
+    if (anillo) anillo.position.set(x, 0.02, z);
+
+    const obs = OBSTACULOS.find(o => o.id === id);
+    if (obs && ancho && fondo) {
+        obs.x0 = x - ancho / 2; obs.x1 = x + ancho / 2;
+        obs.z0 = z - fondo / 2; obs.z1 = z + fondo / 2;
+    }
+}
+
+function colocar(objeto, x, y, z, rotY = 0) {
+    objeto.position.set(x, y, z);
+    objeto.rotation.y = rotY;
+    scene.add(objeto);
+    return objeto;
+}
+
+/* ==========================================================================
+   10 · EQUIPO MAYOR
+   Si algún modelo te queda volteado, el único número que tienes que tocar
+   es el último argumento de colocar(): la rotación en Y.
+   ========================================================================== */
+const RUTA = '../../recursos/';
+
+function cargarEquipoDeCocina(loader) {
+    // --- Horno de banda ---
+    loader.load(RUTA + 'built-in_oven.glb', g => {
+        const st = porId('horno');
+        colocar(normalizar(g.scene, 1.5, 'y'), st.pos[0], 0, st.pos[1] + 0.05, 0);
+    }, undefined, () => marcadorFaltante(1.55, 1.5, 1.5, -1.9, -2.95, 'horno'));
+
+    // --- Campana extractora, justo encima del horno ---
+    loader.load(RUTA + 'ge_stainless_steel_chimney_stylerange_hood.glb', g => {
+        const st = porId('campana');
+        // El ancho de este modelo corre sobre su eje Z, por eso normalizamos
+        // en 'z' y lo giramos 90°: así queda del ancho exacto del horno.
+        colocar(normalizar(g.scene, 1.55, 'z'), st.pos[0], 2.0, -3.2, Math.PI / 2);
+    }, undefined, () => marcadorFaltante(1.55, 1.15, 1.0, -1.9, -3.2, 'campana'));
+
+    // --- Cámara fría: esquinada al fondo a la derecha ---
+    loader.load(RUTA + 'modern_refrigerator_with_freezer_drawer.glb', g => {
+        const modelo = normalizar(g.scene, 1.95, 'y');
+        modelo.position.set(0, 0, 0);
+
+        // ¡AQUÍ CONTROLAS HACIA DÓNDE MIRA!
+        // Prueba con: Math.PI / 2, -Math.PI / 2, o Math.PI
+        modelo.rotation.y = -Math.PI / 2;
+
+        scene.add(modelo);
+
+        // El giro de arriba se aplica antes de medir, así que la esquina se
+        // calcula sobre la orientación que tú elegiste.
+        const lugar = acomodarEnEsquina(modelo, 1, -1);
+        // La ficha, el anillo y el punto del minimapa se van con él.
+        moverEstacion('frio', lugar.x, lugar.z, lugar.ancho + 0.15, lugar.fondo + 0.15);
+    }, undefined, () => marcadorFaltante(1.0, 1.95, 0.75, 4.85, -3.3, 'refrigerador'));
+
+    // --- Lavamanos: recargado en el muro izquierdo, debajo de su letrero ---
+    loader.load(RUTA + 'kitchen_counter_with_sink.glb', g => {
+        const st = porId('lavado');
+        // rotación 0: la jaladera del mueble (su frente) apunta a +X, o sea a
+        // la cocina, y la llave queda contra la pared. Medido en el modelo.
+        const modelo = normalizar(g.scene, 0.95, 'y');
+        modelo.position.set(0, 0, 0);
+        scene.add(modelo);
+        const lugar = acomodarEnPared(modelo, -1, st.pos[1]);
+        obstaculoDe('lavado', lugar.x, lugar.z, lugar.ancho + 0.12, lugar.fondo + 0.12);
+    }, undefined, () => marcadorFaltante(0.6, 0.95, 0.62, -5.17, -0.7, 'lavamanos'));
+
+    /* --- Recepción: patín cargado con palet y cajas ---
+
+       El montaje va apilado: patín en el piso, palet sobre sus horquillas
+       y las cajas sobre el palet. Por eso los tres modelos se cargan aquí
+       juntos y se arman al final, cuando ya llegaron todos: si cada uno se
+       colocara por su cuenta, el que llegara primero no sabría a qué
+       altura ponerse.
+
+       OJO: cada callback necesita su propia `const st`. Los callbacks del
+       cargador corren mucho después, y fuera de ellos no existe ningún st. */
+    montarRecepcion(loader);
+
+    // --- Bote de pedal: al fondo del mismo muro ---
+    loader.load(RUTA + 'trashcan.glb', g => {
+        const st = porId('residuos');
+        colocar(normalizar(g.scene, 0.8, 'max'), st.pos[0], 0, st.pos[1], 0.4);
+    }, undefined, () => marcadorFaltante(0.5, 0.65, 0.5, -4.8, -2.8, 'bote'));
+}
+
+/* ==========================================================================
+   RECEPCIÓN: PATÍN + PALET + CAJAS
+   --------------------------------------------------------------------------
+   Los tres van apilados, así que se cargan juntos y se arman cuando ya
+   llegaron los tres. Todas las medidas que quizá quieras mover están en
+   RECEPCION, aquí abajo: no hay números sueltos repartidos por el código.
+   ========================================================================== */
+
+const RECEPCION = {
+    // Alto del patín, de las ruedas a la punta de la palanca.
+    altoPatin: 1.22,
+
+    /* A qué altura quedan las horquillas, como fracción del alto del patín.
+       Sale de medir el modelo: las ruedas delanteras rematan al 5.7 % y las
+       horquillas apoyan justo encima. Si el palet te queda hundido o flotando,
+       este es EL número que hay que mover. */
+    fraccionHorquillas: 0.105,
+
+    largoPalet: 1.20,      // el lado largo corre sobre las horquillas
+    aristaCaja: 0.42,
+
+    // El palet va adelantado sobre las horquillas, no centrado en el patín:
+    // así es como queda cuando de verdad lo levantas.
+    paletAdelante: -0.06,
+
+    giro: Math.PI * 0.5    // hacia dónde apunta el conjunto
 };
 
-/* ---------------------------------------------------------------------------
-   2. REGLAS DEL JUEGO
---------------------------------------------------------------------------- */
+function montarRecepcion(loader) {
+    const st = porId('recepcion');
+    const cx = st.pos[0], cz = st.pos[1];
 
-const INGREDIENTS = [
-    { key: "salsa",     name: "Salsa",      accion: "Untar",    type: "sauce"   },
-    { key: "queso",     name: "Mozzarella", accion: "Esparcir", type: "cheese"  },
-    { key: "pepperoni", name: "Pepperoni",  accion: "Colocar",  type: "topping" },
-    { key: "champinon", name: "Champiñón",  accion: "Colocar",  type: "topping" },
-    { key: "pina",      name: "Piña",       accion: "Colocar",  type: "topping" },
-    { key: "jamon",     name: "Jamón",      accion: "Colocar",  type: "topping" },
-    { key: "aceitunas", name: "Aceitunas",  accion: "Colocar",  type: "topping" },
-    { key: "pimiento",  name: "Pimiento",   accion: "Colocar",  type: "topping" }
-];
-
-const TOPPING_KEYS = INGREDIENTS.filter(i => i.type === "topping").map(i => i.key);
-const NOMBRES = {};
-INGREDIENTS.forEach(i => NOMBRES[i.key] = i.name);
-
-const MAX_PIEZAS_POR_TOPPING = 8;
-const MIN_PIEZAS_VALIDAS = 5;
-const SESSION_ORDER_LIMIT = 8;
-
-/* Horneado (QTE)
-   La aguja rebota de un extremo al otro del dial y hay que detenerla dentro
-   de la franja verde. Cada rebote la acelera, la franja es angosta y cambia
-   de lugar en cada pedido. En paralelo corre un límite: si nadie saca la
-   pizza, se quema sola. */
-const HORNEADO = {
-    anchoInicial: 16,
-    anchoFinal: 10,
-    barridoInicial: 1500,
-    barridoFinal: 950,
-    aceleracion: 1.05,
-    velocidadTope: 1.5,
-    limiteInicial: 9000,
-    limiteFinal: 6000,
-    nucleo: 0.34
-};
-
-function configHorneado() {
-    const hechos = GameState.historialPedidos.length;
-    const t = SESSION_ORDER_LIMIT > 1 ? Math.min(hechos / (SESSION_ORDER_LIMIT - 1), 1) : 0;
-    const entre = (a, b) => a + (b - a) * t;
-
-    const ancho = Math.round(entre(HORNEADO.anchoInicial, HORNEADO.anchoFinal));
-    const inicio = randInt(18, 82 - ancho);
-    const margen = (ancho * (1 - HORNEADO.nucleo)) / 2;
-
-    return {
-        inicio,
-        fin: inicio + ancho,
-        ancho,
-        barridoMs: Math.round(entre(HORNEADO.barridoInicial, HORNEADO.barridoFinal)),
-        limiteMs: Math.round(entre(HORNEADO.limiteInicial, HORNEADO.limiteFinal)),
-        nucleoIni: inicio + margen,
-        nucleoFin: inicio + ancho - margen
+    const piezas = {};
+    const armarSiEstanTodas = () => {
+        if (!piezas.patin || !piezas.palet || !piezas.caja) return;
+        armarRecepcion(piezas, cx, cz);
     };
+
+    loader.load(RUTA + 'diablito.glb', g => {
+        piezas.patin = g.scene; armarSiEstanTodas();
+    }, undefined, () => marcadorFaltante(0.6, 1.2, 1.5, cx, cz, 'patín'));
+
+    loader.load(RUTA + 'palet_interior.glb', g => {
+        piezas.palet = g.scene; armarSiEstanTodas();
+    }, undefined, () => console.warn('[entorno-3d] sin palet'));
+
+    loader.load(RUTA + 'caja_carton.glb', g => {
+        piezas.caja = g.scene; armarSiEstanTodas();
+    }, undefined, () => console.warn('[entorno-3d] sin cajas de cartón'));
 }
 
-const BONO_TIEMPO = [
-    { hasta: 25, puntos: 60, etiqueta: "Ritmo de hora pico" },
-    { hasta: 40, puntos: 30, etiqueta: "Buen ritmo" }
-];
+function armarRecepcion(piezas, cx, cz) {
+    const R = RECEPCION;
 
-const PASOS = [
-    "Leer la comanda",
-    "Untar la salsa",
-    "Esparcir el queso",
-    "Colocar ingredientes",
-    "Hornear",
-    "Verificar contra comanda"
-];
+    /* 1 · El patín, en el piso. */
+    const patin = normalizar(piezas.patin, R.altoPatin, 'y');
+    colocar(patin, cx, 0, cz, R.giro);
 
-/* ---------------------------------------------------------------------------
-   3. ESTADO DE LA SESIÓN
---------------------------------------------------------------------------- */
+    /* 2 · El palet, encima de las horquillas.
+       El desplazamiento se gira junto con el conjunto: si no, al cambiar
+       RECEPCION.giro el palet se quedaría apuntando a otro lado. */
+    const yHorquillas = R.altoPatin * R.fraccionHorquillas;
+    const dz = R.paletAdelante;
+    const px = cx + Math.sin(R.giro) * dz;
+    const pz = cz + Math.cos(R.giro) * dz;
 
-const GameState = {
-    score: 0,
-    streak: 0,
-    mejorRacha: 0,
-    pedidoNumero: 0,
-    startTime: Date.now(),
-    historialPedidos: []
-};
+    // El palet se gira 90° respecto al patín: su lado largo debe correr a lo
+    // largo de las horquillas, no cruzado sobre ellas.
+    const palet = normalizar(piezas.palet, R.largoPalet, 'z');
+    colocar(palet, px, yHorquillas, pz, R.giro + Math.PI / 2);
+    const altoPalet = alturaDe(palet);
 
-function reiniciarSesion() {
-    GameState.score = 0;
-    GameState.streak = 0;
-    GameState.mejorRacha = 0;
-    GameState.pedidoNumero = 0;
-    GameState.startTime = Date.now();
-    GameState.historialPedidos = [];
+    /* 3 · Tres cajas en triángulo: dos atrás y una al frente, centrada. */
+    // Triángulo: dos atrás y una al frente. Los factores dejan unos 4 cm de
+    // aire entre cajas; por debajo de 0.5 se tocarían.
+    const a = R.aristaCaja;
+    const sitios = [
+        [-a * 0.54, -a * 0.55, 0.05],
+        [a * 0.54, -a * 0.55, -0.07],
+        [0, a * 0.55, 0.12]
+    ];
+
+    sitios.forEach(([ux, uz, giroCaja]) => {
+        // ux/uz están en ejes del palet, así que se rotan con el conjunto.
+        const gx = cx + Math.cos(R.giro) * ux + Math.sin(R.giro) * (uz + dz);
+        const gz = cz - Math.sin(R.giro) * ux + Math.cos(R.giro) * (uz + dz);
+        const caja = normalizar(piezas.caja, a, 'max');
+        colocar(caja, gx, yHorquillas + altoPalet, gz, R.giro + giroCaja);
+    });
 }
 
-/**
- * Reporta el turno EN CURSO al Panel de KPIs.
- *
- * Se llama al terminar cada pedido, no solo al cerrar el turno: así el
- * panel se llena desde la primera pizza y no hay que completar los ocho
- * pedidos para ver algo.
- *
- * GameState.startTime identifica al turno, y guardarSesion ACTUALIZA el
- * registro que tenga ese mismo id. Por eso reportar ocho veces deja un
- * solo turno en el historial, no ocho.
- *
- * Sin sesión iniciada no hace nada: no habría a quién atribuirle el turno.
- */
-function reportarTurno() {
-    if (!window.Progreso) return;
-
-    const h = GameState.historialPedidos;
-    if (!h.length) return;
-
-    const n = h.length;
-    const perfectos = h.filter(p => p.perfecto).length;
-    const bake = { cruda: 0, perfecta: 0, quemada: 0 };
-    h.forEach(p => { if (bake[p.bakeResult] !== undefined) bake[p.bakeResult]++; });
-
-    const promCorrectos = h.reduce((a, p) => a + p.correctos, 0) / n;
-
-    window.Progreso.guardarSesion(window.Progreso.MODULOS.SIM2D, {
-        pedidos: n,
-        puntos: GameState.score,
-        perfectosPct: Math.round((perfectos / n) * 100),
-        precision: Math.round((promCorrectos / TOPPING_KEYS.length) * 100),
-        tiempoProm: +(h.reduce((a, p) => a + p.segundos, 0) / n).toFixed(1),
-        mejorRacha: GameState.mejorRacha,
-        estrellas: +(h.reduce((a, p) => a + p.estrellas, 0) / n).toFixed(2),
-        coccion: bake
-    }, GameState.startTime);
+function alturaDe(modelo) {
+    modelo.updateMatrixWorld(true);
+    return new Box3().setFromObject(modelo).getSize(new Vector3()).y;
 }
 
-function tiempoSesion() {
-    const s = Math.floor((Date.now() - GameState.startTime) / 1000);
-    return String(Math.floor(s / 60)).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
-}
+/* ==========================================================================
+   11 · UTENSILIOS
+   ========================================================================== */
+function cargarUtensilios(loader) {
+    // --- Rodillo, cortador y caja vienen los tres en el mismo archivo ---
+    loader.load(RUTA + 'pizza_box_rolling_pin_pizza_cutter.glb', g => {
+        const armado = porId('armado');
+        const corte = porId('corte');
+        const raiz = g.scene;
 
-/* ---------------------------------------------------------------------------
-   4. SONIDO SINTETIZADO (efectos, sin archivos)
---------------------------------------------------------------------------- */
+        const rodillo = extraerPieza(raiz, 'RollingPin_ModelMain_0', 0.42);
+        if (rodillo) colocar(rodillo, armado.pos[0] + 0.8, armado.top, armado.pos[1] - 0.1, 0.35);
 
-const SFX = {
-    ctx: null,
-    muted: false,
+        const cortador = extraerPieza(raiz, 'PizzaCutter_ModelMain_1', 0.22);
+        // Media vuelta: el desplazamiento se espeja y la rotación suma PI.
+        if (cortador) colocar(cortador, corte.pos[0] - 0.05, corte.top, corte.pos[1] - 0.35, -0.5 + Math.PI);
 
-    ensure() {
-        if (this.ctx) return;
-        const AC = window.AudioContext || window.webkitAudioContext;
-        if (!AC) return;
-        try { this.ctx = new AC(); } catch (e) { this.ctx = null; }
-    },
+        // La caja de repuesto se va a la mesa auxiliar del fondo, para no
+        // encimarla con la caja abierta que ya está en la mesa de corte.
+        const cajita = extraerPieza(raiz, 'PizzaBox_ModelMain_2', 0.34);
+        if (cajita) colocar(cajita, 2.45, 0.9, -3.25, 0.15);
+    }, undefined, () => console.warn('[entorno-3d] sin rodillo/cortador'));
 
-    tone(freq, dur = 0.08, type = "square", vol = 0.05) {
-        if (this.muted) return;
-        this.ensure();
-        if (!this.ctx) return;
-        if (this.ctx.state === "suspended") this.ctx.resume();
+    // --- Charola de horno, en la banda de salida ---
+    loader.load(RUTA + 'pizza__tray.glb', g => {
+        const st = porId('horno');
+        colocar(normalizar(g.scene, 0.44, 'max'), st.pos[0] + 0.05, 0.92, st.pos[1] + 1.25, 0.2);
+    }, undefined, () => console.warn('[entorno-3d] sin charola'));
 
-        const t = this.ctx.currentTime;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.type = type;
-        osc.frequency.setValueAtTime(freq, t);
-        gain.gain.setValueAtTime(vol, t);
-        gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-        osc.connect(gain).connect(this.ctx.destination);
-        osc.start(t);
-        osc.stop(t + dur);
-    },
-
-    click()  { this.tone(520, 0.05, "square", 0.04); },
-    place()  { this.tone(340 + Math.random() * 120, 0.07, "triangle", 0.05); },
-    spread() { this.tone(180, 0.22, "sawtooth", 0.035); },
-    denied() { this.tone(120, 0.14, "sawtooth", 0.05); },
-    rebote() { this.tone(210, 0.03, "square", 0.022); },
-    oven()   { this.tone(90, 0.4, "sawtooth", 0.045); },
-
-    win() {
-        [523, 659, 784, 1047].forEach((f, i) =>
-            setTimeout(() => this.tone(f, 0.14, "triangle", 0.05), i * 85));
-    },
-
-    fail() {
-        [330, 262, 196].forEach((f, i) =>
-            setTimeout(() => this.tone(f, 0.16, "sawtooth", 0.05), i * 110));
-    }
-};
-
-/* ---------------------------------------------------------------------------
-   5. UTILIDADES
---------------------------------------------------------------------------- */
-
-function randInt(min, max) {
-    return Math.floor(Math.random() * (max - min + 1)) + min;
-}
-
-function pickRandomSubset(arr, count) {
-    const copy = arr.slice();
-    const out = [];
-    while (out.length < count && copy.length) out.push(copy.splice(randInt(0, copy.length - 1), 1)[0]);
-    return out;
-}
-
-function generarPedidoAleatorio() {
-    // La dificultad sube conforme avanza el turno: más ingredientes al final.
-    const avance = GameState.pedidoNumero / SESSION_ORDER_LIMIT;
-    const min = avance > 0.6 ? 3 : 2;
-    const max = avance > 0.3 ? 4 : 3;
-    return {
-        sauce: true,
-        cheese: Math.random() > 0.12,
-        toppings: pickRandomSubset(TOPPING_KEYS, randInt(min, max))
-    };
-}
-
-// Interpolación manual de color, sin depender de APIs que cambian de versión.
-function lerpColor(a, b, t) {
-    t = Math.max(0, Math.min(1, t));
-    const ar = (a >> 16) & 255, ag = (a >> 8) & 255, ab = a & 255;
-    const br = (b >> 16) & 255, bg = (b >> 8) & 255, bb = b & 255;
-    return ((ar + (br - ar) * t) << 16 | (ag + (bg - ag) * t) << 8 | (ab + (bb - ab) * t)) & 0xffffff;
-}
-
-function puntosEstrella(cx, cy, rOut, rIn, picos = 5) {
-    const pts = [];
-    for (let i = 0; i < picos * 2; i++) {
-        const a = (Math.PI / picos) * i - Math.PI / 2;
-        const r = i % 2 ? rIn : rOut;
-        pts.push({ x: cx + Math.cos(a) * r, y: cy + Math.sin(a) * r });
-    }
-    return pts;
-}
-
-/* ---------------------------------------------------------------------------
-   6. UI — piezas compartidas por todas las escenas
---------------------------------------------------------------------------- */
-
-const UI = {
-
-    fondo(scene) {
-        scene.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, C.night);
-        scene.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "vineta").setAlpha(0.55);
-    },
-
-    panel(scene, x, y, w, h, opts = {}) {
-        const g = scene.add.graphics();
-        g.fillStyle(opts.fill !== undefined ? opts.fill : C.panel, opts.alpha !== undefined ? opts.alpha : 1);
-        g.fillRoundedRect(x, y, w, h, opts.radio || 14);
-        g.lineStyle(1.5, opts.borde !== undefined ? opts.borde : C.line, 1);
-        g.strokeRoundedRect(x, y, w, h, opts.radio || 14);
-        return g;
-    },
-
-    eyebrow(scene, x, y, texto, color = "muted") {
-        return scene.add.text(x, y, texto.toUpperCase(), {
-            fontFamily: FONT_BODY, fontSize: "11px", fontStyle: "bold",
-            color: H(color), letterSpacing: 3
-        });
-    },
-
-    boton(scene, x, y, w, h, label, onClick, opts = {}) {
-        const tono = opts.tono || "red";
-        const relleno = { red: C.red, blue: C.blueDeep, ghost: C.panelSoft }[tono];
-        const bordeCol = { red: C.redDeep, blue: C.blue, ghost: C.line }[tono];
-
-        const cont = scene.add.container(x, y);
-
-        const g = scene.add.graphics();
-        g.fillStyle(relleno, 1);
-        g.fillRoundedRect(-w / 2, -h / 2, w, h, 10);
-        g.lineStyle(1.5, bordeCol, 1);
-        g.strokeRoundedRect(-w / 2, -h / 2, w, h, 10);
-
-        const txt = scene.add.text(0, 0, label, {
-            fontFamily: FONT_BODY, fontSize: (opts.size || 14) + "px", fontStyle: "bold",
-            color: tono === "ghost" ? H("text") : "#ffffff"
-        }).setOrigin(0.5);
-
-        const hit = scene.add.rectangle(0, 0, w, h, 0xffffff, 0).setInteractive({ useHandCursor: true });
-
-        cont.add([g, txt, hit]);
-        cont.setSize(w, h);
-        cont.enabled = true;
-
-        cont.setEnabled = (on) => {
-            cont.enabled = on;
-            cont.setAlpha(on ? 1 : 0.35);
-            hit.input.enabled = on;
-            return cont;
-        };
-        cont.setLabel = (t) => { txt.setText(t); return cont; };
-
-        hit.on("pointerover", () => { if (cont.enabled) scene.tweens.add({ targets: cont, scale: 1.04, duration: 110 * MOTION }); });
-        hit.on("pointerout",  () => scene.tweens.add({ targets: cont, scale: 1, duration: 110 * MOTION }));
-        hit.on("pointerdown", () => {
-            if (!cont.enabled) { SFX.denied(); return; }
-            SFX.click();
-            scene.tweens.add({ targets: cont, scale: 0.95, duration: 60 * MOTION, yoyo: true });
-            onClick();
-        });
-
-        return cont;
-    },
-
-    /** Barra superior: identidad, pedido, puntos, racha, tiempo y audio. */
-    hud(scene, subtitulo) {
-        const h = LAY.hudH;
-
-        const g = scene.add.graphics();
-        g.fillStyle(C.panel, 1);
-        g.fillRect(0, 0, GAME_WIDTH, h);
-        g.lineStyle(2, C.red, 1);
-        g.beginPath(); g.moveTo(0, h); g.lineTo(GAME_WIDTH, h); g.strokePath();
-
-        scene.add.text(LAY.pad, 14, "ESTACIÓN DE ARMADO", {
-            fontFamily: FONT_DISPLAY, fontSize: "18px", color: H("text"), letterSpacing: 1
-        });
-        scene.add.text(LAY.pad + 1, 38, subtitulo, {
-            fontFamily: FONT_BODY, fontSize: "12px", color: H("muted")
-        });
-
-        const hechos = GameState.historialPedidos.length;
-        const cols = [
-            { et: "Pedido", val: `${Math.min(hechos + 1, SESSION_ORDER_LIMIT)}/${SESSION_ORDER_LIMIT}`, color: "text" },
-            { et: "Puntos", val: String(GameState.score), color: "amber" },
-            { et: "Racha",  val: String(GameState.streak), color: "mint" },
-            { et: "Tiempo", val: tiempoSesion(), color: "text", reloj: true }
-        ];
-
-        const anchoCol = 104;
-        const derecha = GAME_WIDTH - 68;                     // hueco del botón de audio
-        const primera = derecha - cols.length * anchoCol;
-
-        cols.forEach((c, i) => {
-            const cx = primera + i * anchoCol + anchoCol / 2;
-            scene.add.text(cx, 14, c.et.toUpperCase(), {
-                fontFamily: FONT_BODY, fontSize: "10px", fontStyle: "bold",
-                color: H("muted"), letterSpacing: 1
-            }).setOrigin(0.5, 0);
-
-            const valor = scene.add.text(cx, 29, c.val, {
-                fontFamily: FONT_DISPLAY, fontSize: "20px", color: H(c.color)
-            }).setOrigin(0.5, 0);
-
-            if (c.reloj) {
-                scene.time.addEvent({
-                    delay: 500, loop: true,
-                    callback: () => valor.setText(tiempoSesion())
-                });
-            }
-        });
-
-        const sg = scene.add.graphics();
-        sg.lineStyle(1, C.line, 0.9);
-        for (let i = 1; i < cols.length; i++) {
-            const lx = primera + i * anchoCol;
-            sg.beginPath(); sg.moveTo(lx, 16); sg.lineTo(lx, h - 16); sg.strokePath();
-        }
-
-        // Avance del turno pegado al borde inferior del HUD.
-        const pg = scene.add.graphics();
-        pg.fillStyle(C.line, 1);
-        pg.fillRect(0, h - 4, GAME_WIDTH, 3);
-        pg.fillStyle(C.mint, 1);
-        pg.fillRect(0, h - 4, GAME_WIDTH * (hechos / SESSION_ORDER_LIMIT), 3);
-
-        const mute = scene.add.text(GAME_WIDTH - 34, 22, SFX.muted ? "🔇" : "🔊", {
-            fontFamily: FONT_BODY, fontSize: "18px", color: H("muted")
-        }).setOrigin(0.5, 0).setInteractive({ useHandCursor: true });
-
-        mute.on("pointerdown", () => {
-            SFX.muted = !SFX.muted;
-            MUSICA.silenciar(SFX.muted);
-            mute.setText(SFX.muted ? "🔇" : "🔊");
-            if (!SFX.muted) SFX.click();
-        });
-
-        return h;
-    },
-
-    /**
-     * Columna derecha: en qué paso del procedimiento va el turno.
-     * La numeración es real (el orden importa), por eso lleva número.
-     */
-    procedimiento(scene, activo) {
-        const x = LAY.derX, y = LAY.filaY, w = LAY.colW, h = LAY.filaH;
-        UI.panel(scene, x, y, w, h);
-
-        scene.add.text(x + 18, y + 18, "PROCEDIMIENTO", {
-            fontFamily: FONT_BODY, fontSize: "11px", fontStyle: "bold",
-            color: H("blue"), letterSpacing: 3
-        });
-
-        const filaH = 52, gap = 8;
-        const sy = y + 48;
-
-        PASOS.forEach((paso, i) => {
-            const fy = sy + i * (filaH + gap);
-            const hecho = i < activo;
-            const activa = i === activo;
-
-            const g = scene.add.graphics();
-            g.fillStyle(activa ? C.panelSoft : C.panel, activa ? 1 : 0.5);
-            g.fillRoundedRect(x + 12, fy, w - 24, filaH, 10);
-            g.lineStyle(activa ? 2 : 1, activa ? C.blue : (hecho ? C.mint : C.line), activa ? 1 : 0.7);
-            g.strokeRoundedRect(x + 12, fy, w - 24, filaH, 10);
-
-            // Ficha con el número, o palomita si el paso ya se cumplió.
-            const cg = scene.add.graphics();
-            cg.fillStyle(activa ? C.blue : (hecho ? C.mint : C.line), 1);
-            cg.fillRoundedRect(x + 24, fy + filaH / 2 - 12, 24, 24, 7);
-
-            scene.add.text(x + 36, fy + filaH / 2, hecho ? "✓" : String(i + 1), {
-                fontFamily: FONT_BODY, fontSize: "12px", fontStyle: "bold", color: "#ffffff"
-            }).setOrigin(0.5);
-
-            scene.add.text(x + 58, fy + filaH / 2, paso, {
-                fontFamily: FONT_BODY, fontSize: "13px",
-                fontStyle: activa ? "bold" : "normal",
-                color: activa ? H("text") : (hecho ? H("mint") : H("muted")),
-                wordWrap: { width: w - 82 }
-            }).setOrigin(0, 0.5);
-        });
-    },
-
-    titulo(scene, x, y, eyebrow, titulo, align = 0, size = 30) {
-        scene.add.text(x, y, eyebrow.toUpperCase(), {
-            fontFamily: FONT_BODY, fontSize: "12px", fontStyle: "bold",
-            color: H("red"), letterSpacing: 3
-        }).setOrigin(align, 0);
-        scene.add.text(x, y + 18, titulo, {
-            fontFamily: FONT_DISPLAY, fontSize: size + "px", color: H("text")
-        }).setOrigin(align, 0);
-    },
-
-    estrellas(scene, x, y, ganadas, escala = 1) {
+    /* --- Cajas de pizza cerradas: solo en despacho ---
+       La pila que estaba en recepción se quitó: ahí ahora van cajas de
+       cartón sobre el palet, que es lo que de verdad llega en el camión.
+       Las cajas de pizza son producto terminado y su sitio es la salida. */
+    loader.load(RUTA + 'dominos_pizza_box.glb', g => {
+        const desp = porId('despacho');
         for (let i = 0; i < 3; i++) {
-            const s = scene.add.image(x + (i - 1) * 40 * escala, y, "estrella")
-                .setScale(escala)
-                .setTint(i < ganadas ? C.amber : C.line)
-                .setAlpha(i < ganadas ? 1 : 0.5);
-            if (i < ganadas) {
-                s.setScale(escala * 2.2).setAlpha(0);
-                scene.tweens.add({
-                    targets: s, scale: escala, alpha: 1,
-                    duration: 320 * MOTION, delay: (200 + i * 130) * MOTION,
-                    ease: "Back.out"
-                });
-            }
+            const c = normalizar(g.scene, 0.38, 'max');
+            colocar(c, desp.pos[0] - 0.45, desp.top + 0.35 + i * 0.05, desp.pos[1], -0.1 + i * 0.08);
         }
-    },
+    }, undefined, () => console.warn('[entorno-3d] sin cajas cerradas'));
 
-    irA(scene, key, data) {
-        if (scene._saliendo) return;
-        scene._saliendo = true;
-        scene.cameras.main.fadeOut(180 * MOTION, 8, 16, 26);
-        scene.cameras.main.once("camerafadeoutcomplete", () => scene.scene.start(key, data));
-    },
+    // --- Caja abierta lista para encajar, sobre la mesa de corte ---
+    loader.load(RUTA + 'pizza_box_-dominos.glb', g => {
+        const st = porId('corte');
+        colocar(normalizar(g.scene, 0.42, 'x'), st.pos[0] - 0.62, st.top, st.pos[1] + 0.15, -0.25 + Math.PI);
+    }, undefined, () => console.warn('[entorno-3d] sin caja abierta'));
 
-    entrar(scene) {
-        // Phaser reutiliza la instancia de escena en cada visita, así que la
-        // bandera de transición tiene que limpiarse aquí.
-        scene._saliendo = false;
-        scene.cameras.main.fadeIn(200 * MOTION, 8, 16, 26);
-    }
-};
+    // --- Pack de utensilios (foodpack trae su geometría embebida) ---
+    loader.load(RUTA + 'foodpack.gltf', g => {
+        const raiz = g.scene;
+        const armado = porId('armado');
+        const desp = porId('despacho');
 
-/* ---------------------------------------------------------------------------
-   7. BOOT — generación de las texturas temporales
---------------------------------------------------------------------------- */
-
-class BootScene extends Phaser.Scene {
-
-    constructor() { super("BootScene"); }
-
-    preload() {
-        MUSICA.precargar(this);
-
-        /* Arte real de los ingredientes. Cada PNG es UNA pieza suelta y
-           cuadrada de 256 px: en la pizza se colocan cinco o más veces, y
-           un racimo repetido se notaría de inmediato.
-
-           Los nombres van sin acentos a propósito. Los originales traían
-           'ñ', y ese carácter en una URL falla en varios servidores.
-
-           Si algún archivo no está, BootScene dibuja la ficha de siempre
-           en su lugar: el juego nunca se queda sin ingrediente. */
-        SPRITES_ING.forEach(key => {
-            this.load.image("ing_" + key, `../../recursos/texturas/ing/${key}.png`);
-        });
-
-        // Pizza de la pantalla de inicio. Si falta, la intro arma la suya
-        // con las capas de siempre.
-        this.load.image("pizza_intro", "../../recursos/texturas/pizza-intro.png");
-    }
-
-    create() {
-        this.generarTexturas();
-        this.scene.start("IntroScene");
-    }
-
-    generarTexturas() {
-        const g = this.make.graphics({ add: false });
-
-        /* ---- Viñeta de ambiente ---- */
-        g.clear();
-        for (let i = 0; i < 30; i++) {
-            g.fillStyle(0x000000, 0.026);
-            g.fillCircle(GAME_WIDTH / 2, GAME_HEIGHT / 2, 900 - i * 28);
-        }
-        g.generateTexture("vineta", GAME_WIDTH, GAME_HEIGHT);
-
-        /* ---- Sombra suave ---- */
-        g.clear();
-        for (let i = 0; i < 16; i++) {
-            g.fillStyle(0x000000, 0.05);
-            g.fillEllipse(200, 44, 360 - i * 17, 74 - i * 3.8);
-        }
-        g.generateTexture("sombra_suave", 400, 88);
-
-        /* ---- Tabla de madera ---- */
-        g.clear();
-        g.fillStyle(C.woodDark, 1);
-        g.fillRoundedRect(0, 0, 400, 400, 26);
-        g.fillStyle(C.wood, 1);
-        g.fillRoundedRect(6, 6, 388, 388, 24);
-        g.lineStyle(2, C.woodDark, 0.26);
-        for (let i = 1; i < 13; i++) {
-            g.beginPath();
-            g.moveTo(12, i * 31);
-            g.lineTo(388, i * 31 + (i % 2 ? 6 : -6));
-            g.strokePath();
-        }
-        g.generateTexture("tabla", 400, 400);
-
-        /* ---- Masa ---- */
-        g.clear();
-        g.fillStyle(0x9a6b2c, 1); g.fillCircle(150, 150, 150);
-        g.fillStyle(C.wood, 1);    g.fillCircle(150, 150, 145);
-        g.fillStyle(0xd8a45e, 0.7);
-        for (let i = 0; i < 32; i++) {
-            const a = (Math.PI * 2 / 32) * i;
-            g.fillCircle(150 + Math.cos(a) * 136, 150 + Math.sin(a) * 136, randInt(5, 9));
-        }
-        g.generateTexture("masa_corteza", 300, 300);
-
-        g.clear();
-        g.fillStyle(0xecc98f, 1); g.fillCircle(128, 128, 128);
-        g.fillStyle(0xf2d5a3, 0.6); g.fillCircle(128, 128, 116);
-        g.generateTexture("masa_base", 256, 256);
-
-        /* ---- Salsa y espiral de untado ---- */
-        g.clear();
-        g.fillStyle(0x8f2a19, 1); g.fillCircle(123, 123, 123);
-        g.fillStyle(0xb33a24, 1); g.fillCircle(123, 123, 118);
-        g.fillStyle(0xc4462c, 0.5);
-        for (let i = 0; i < 22; i++) {
-            const a = Math.random() * Math.PI * 2, r = Math.random() * 100;
-            g.fillCircle(123 + Math.cos(a) * r, 123 + Math.sin(a) * r, randInt(7, 16));
-        }
-        g.generateTexture("salsa", 246, 246);
-
-        g.clear();
-        g.lineStyle(9, 0xd8512f, 0.55);
-        g.beginPath();
-        for (let t = 0; t < Math.PI * 6; t += 0.12) {
-            const r = 8 + (t / (Math.PI * 6)) * 104;
-            const x = 123 + Math.cos(t) * r, y = 123 + Math.sin(t) * r;
-            if (t === 0) g.moveTo(x, y); else g.lineTo(x, y);
-        }
-        g.strokePath();
-        g.generateTexture("salsa_espiral", 246, 246);
-
-        /* ---- Queso ---- */
-        g.clear();
-        g.fillStyle(0xf7e6b4, 0.92); g.fillCircle(118, 118, 118);
-        g.fillStyle(0xfff3cc, 0.55);
-        for (let i = 0; i < 26; i++) {
-            const a = Math.random() * Math.PI * 2, r = Math.random() * 104;
-            g.fillCircle(118 + Math.cos(a) * r, 118 + Math.sin(a) * r, randInt(6, 15));
-        }
-        g.fillStyle(0xe0b95f, 0.35);
-        for (let i = 0; i < 14; i++) {
-            const a = Math.random() * Math.PI * 2, r = Math.random() * 100;
-            g.fillCircle(118 + Math.cos(a) * r, 118 + Math.sin(a) * r, randInt(4, 8));
-        }
-        g.generateTexture("queso", 236, 236);
-
-        /* ---- Toppings ----
-           Estas fichas son la RED DE SEGURIDAD. Si el PNG del ingrediente
-           cargó, no se dibuja nada y se usa el arte real; si faltó, se
-           genera la ficha de siempre para que el juego siga completo.
-           El lienzo es de ING_PX para que ambos caminos midan igual. */
-        const escalaFicha = ING_PX / 32;
-        const ficha = (key, dibujo) => {
-            if (this.textures.exists("ing_" + key)) return;   // ya hay arte real
-            console.info(`[simulador] sin PNG de "${key}": se usa la ficha dibujada.`);
-            g.clear();
-            // scaleCanvas es la transformación del lienzo de dibujo.
-            // (Graphics.scale es una propiedad del objeto, no un método:
-            //  llamarla como función truena.)
-            g.save();
-            g.scaleCanvas(escalaFicha, escalaFicha);
-            g.fillStyle(0x000000, 0.18); g.fillCircle(17, 18, 14);
-            dibujo();
-            g.restore();
-            g.generateTexture("ing_" + key, ING_PX, ING_PX);
+        const M = {
+            pizza1: matProp('pizza_text.jpg', 0.55),
+            pizza2: matProp('pizza2_text.jpg', 0.55),
+            spatula: matProp('spatula-tex.jpg', 0.45, 0.15),
+            peel: matProp('pizzapeel-tex.png', 0.8, 0, true),
+            plato: matProp('woodenplate-text.jpg', 0.75)
         };
 
-        ficha("pepperoni", () => {
-            g.fillStyle(0x7d1f22, 1); g.fillCircle(16, 16, 14);
-            g.fillStyle(0xb8352f, 1); g.fillCircle(16, 16, 12);
-            g.fillStyle(0x8c2320, 1);
-            g.fillCircle(11, 12, 2.4); g.fillCircle(20, 13, 1.8);
-            g.fillCircle(14, 21, 2.0); g.fillCircle(21, 20, 1.5);
-            g.fillStyle(0xd4574c, 0.5); g.fillCircle(12, 11, 4);
-        });
-
-        ficha("champinon", () => {
-            g.fillStyle(0xd8c39a, 1); g.fillRoundedRect(12, 14, 8, 13, 3);
-            g.fillStyle(0xe9d9b8, 1); g.fillEllipse(16, 13, 26, 17);
-            g.fillStyle(0xc3a874, 1); g.fillEllipse(16, 18, 20, 7);
-            g.fillStyle(0xf5ead2, 0.6); g.fillEllipse(13, 10, 10, 6);
-        });
-
-        ficha("pina", () => {
-            g.fillStyle(0xd9a800, 1);
-            g.fillPoints([{ x: 16, y: 3 }, { x: 29, y: 16 }, { x: 16, y: 29 }, { x: 3, y: 16 }], true);
-            g.fillStyle(0xf6d63f, 1);
-            g.fillPoints([{ x: 16, y: 5 }, { x: 27, y: 16 }, { x: 16, y: 27 }, { x: 5, y: 16 }], true);
-            g.lineStyle(1.4, 0xc79300, 0.8);
-            g.beginPath(); g.moveTo(9, 16); g.lineTo(23, 16); g.strokePath();
-            g.beginPath(); g.moveTo(16, 9); g.lineTo(16, 23); g.strokePath();
-        });
-
-        ficha("jamon", () => {
-            g.fillStyle(0xc9767f, 1); g.fillRoundedRect(3, 8, 26, 17, 6);
-            g.fillStyle(0xeba4ab, 1); g.fillRoundedRect(4, 9, 24, 14, 5);
-            g.fillStyle(0xf6c7cc, 0.7); g.fillRoundedRect(7, 11, 11, 4, 2);
-        });
-
-        ficha("aceitunas", () => {
-            g.fillStyle(0x2a2a2a, 1); g.fillCircle(16, 16, 13);
-            g.fillStyle(0x111111, 1); g.fillCircle(16, 16, 11);
-            g.fillStyle(0x1b3a2a, 1); g.fillCircle(16, 16, 5);
-            g.fillStyle(0x4a4a4a, 0.75); g.fillEllipse(12, 11, 8, 5);
-        });
-
-        ficha("pimiento", () => {
-            g.fillStyle(0x1d7a45, 1); g.fillCircle(16, 16, 13);
-            g.fillStyle(0x2fbc68, 1); g.fillCircle(16, 16, 11);
-            g.fillStyle(0x0f2a1a, 1); g.fillCircle(16, 16, 5.5);
-            g.fillStyle(0x7ee29f, 0.6); g.fillEllipse(12, 11, 8, 5);
-        });
-
-        /* ---- Iconos de los botes de capa ----
-           La salsa ya viene como PNG (el bote de la mesa). El queso se
-           sigue dibujando: en la pizza es una capa esparcida, no una pieza,
-           así que un sprite suelto no le aportaría nada. */
-        ficha("salsa", () => {
-            g.fillStyle(0x8f2a19, 1); g.fillCircle(16, 16, 14);
-            g.fillStyle(0xb33a24, 1); g.fillCircle(16, 16, 12);
-            g.lineStyle(2.2, 0xd8512f, 0.9);
-            g.beginPath();
-            for (let t = 0; t < Math.PI * 3.4; t += 0.2) {
-                const r = 2 + (t / (Math.PI * 3.4)) * 9;
-                const x = 16 + Math.cos(t) * r, y = 16 + Math.sin(t) * r;
-                if (t === 0) g.moveTo(x, y); else g.lineTo(x, y);
-            }
-            g.strokePath();
-        });
-
-        ficha("queso", () => {
-            g.fillStyle(0xe0b95f, 1); g.fillCircle(16, 16, 14);
-            g.fillStyle(0xf7e6b4, 1); g.fillCircle(16, 16, 12);
-            g.fillStyle(0xe8cd86, 1);
-            g.fillCircle(12, 13, 3); g.fillCircle(20, 15, 2.4); g.fillCircle(15, 21, 2.6);
-        });
-
-        /* ---- Partículas ---- */
-        g.clear(); g.fillStyle(0xffffff, 1); g.fillRect(0, 0, 8, 8);
-        g.generateTexture("chispa", 8, 8);
-
-        g.clear();
-        for (let i = 0; i < 8; i++) { g.fillStyle(0xffffff, 0.09); g.fillCircle(16, 16, 16 - i * 1.7); }
-        g.generateTexture("vapor", 32, 32);
-
-        g.clear();
-        g.fillStyle(C.ember, 0.85);
-        g.fillPoints([{ x: 20, y: 0 }, { x: 34, y: 26 }, { x: 20, y: 52 }, { x: 6, y: 26 }], true);
-        g.fillStyle(C.amber, 0.9);
-        g.fillPoints([{ x: 20, y: 12 }, { x: 28, y: 30 }, { x: 20, y: 46 }, { x: 12, y: 30 }], true);
-        g.generateTexture("flama", 40, 52);
-
-        /* ---- Estrella ---- */
-        g.clear();
-        g.fillStyle(0xffffff, 1);
-        g.fillPoints(puntosEstrella(18, 19, 17, 7.4), true);
-        g.generateTexture("estrella", 36, 38);
-
-        /* ---- Pala ---- */
-        g.clear();
-        g.fillStyle(0x6d4520, 1); g.fillRoundedRect(52, 20, 96, 9, 4);
-        g.fillStyle(0xb9bfc7, 1); g.fillEllipse(30, 24, 58, 34);
-        g.fillStyle(0xd6dbe1, 1); g.fillEllipse(30, 22, 50, 27);
-        g.generateTexture("ut_pala", 156, 48);
-
-        g.destroy();
-    }
-}
-
-/* ---------------------------------------------------------------------------
-   8. INTRO — arranque del turno
---------------------------------------------------------------------------- */
-
-class IntroScene extends Phaser.Scene {
-
-    constructor() { super("IntroScene"); }
-
-    create() {
-        UI.fondo(this);
-        UI.entrar(this);
-
-        const cx = GAME_WIDTH / 2, cy = 400;
-
-        this.add.image(cx, cy + 168, "sombra_suave").setAlpha(0.55);
-
-        const pizza = this.add.container(cx, cy);
-
-        if (this.textures.exists("pizza_intro")) {
-            // Una sola imagen: es la portada del módulo, no la pizza que se
-            // arma. Esa se sigue construyendo por capas en la estación.
-            pizza.add(this.add.image(0, 0, "pizza_intro"));
-        } else {
-            // Respaldo: si la imagen no cargó, se arma con las capas.
-            pizza.add(this.add.image(0, 0, "masa_corteza"));
-            pizza.add(this.add.image(0, 0, "masa_base"));
-            pizza.add(this.add.image(0, 0, "salsa"));
-            pizza.add(this.add.image(0, 0, "queso"));
-            ["pepperoni", "champinon", "aceitunas", "pimiento"].forEach(k => {
-                for (let i = 0; i < 5; i++) {
-                    const a = Math.random() * Math.PI * 2, r = Math.random() * 100;
-                    pizza.add(this.add.image(Math.cos(a) * r, Math.sin(a) * r, "ing_" + k)
-                        .setAngle(randInt(0, 359)).setScale(ING_K));
-                }
-            });
-        }
-
-        pizza.setScale(0.5).setAlpha(0);
-        this.tweens.add({ targets: pizza, scale: 0.92, alpha: 1, duration: 640 * MOTION, ease: "Back.out" });
-        if (!REDUCED_MOTION) {
-            this.tweens.add({ targets: pizza, angle: 360, duration: 36000, repeat: -1 });
-            this.tweens.add({ targets: pizza, y: cy - 10, duration: 2600, yoyo: true, repeat: -1, ease: "Sine.inOut" });
-        }
-
-        this.add.text(cx, 92, "TURNO DE PRÁCTICA", {
-            fontFamily: FONT_BODY, fontSize: "13px", fontStyle: "bold",
-            color: H("red"), letterSpacing: 5
-        }).setOrigin(0.5);
-
-        this.add.text(cx, 136, "ESTACIÓN DE ARMADO", {
-            fontFamily: FONT_DISPLAY, fontSize: "54px", color: H("text")
-        }).setOrigin(0.5);
-
-        this.add.text(cx, 190,
-            `${SESSION_ORDER_LIMIT} pedidos. Lee la comanda, arma la pizza, sácala del horno en su punto.`, {
-            fontFamily: FONT_BODY, fontSize: "16px", color: H("muted"), align: "center"
-        }).setOrigin(0.5);
-
-        // Controles: arrastrar es la mecánica central, por eso va primero.
-        const tips = [
-            "Arrastra los ingredientes a la pizza",
-            "Teclas 1-8 para servir rápido",
-            "Espacio hornea y saca la pizza"
-        ];
-        tips.forEach((t, i) => {
-            this.add.text(cx, 600 + i * 22, t, {
-                fontFamily: FONT_TICKET, fontSize: "13px", color: H("muted")
-            }).setOrigin(0.5);
-        });
-
-        const arrancar = () => {
-            SFX.ensure();
-            MUSICA.iniciar(this);       // el clic habilita el audio del navegador
-            reiniciarSesion();
-            UI.irA(this, "OrderScene");
+        const pieza = (nombre, tam, material) => {
+            const p = extraerPieza(raiz, nombre, tam);
+            if (p && material) p.traverse(o => { if (o.isMesh) o.material = material; });
+            return p;
         };
 
-        UI.boton(this, cx, 706, 300, 58, "Iniciar turno", arrancar, { tono: "red", size: 17 });
-        this.input.keyboard.on("keydown-SPACE", arrancar);
-    }
+        /* El plato de madera, la masa cruda y los toppings sembrados uno por
+           uno vivían aquí. Se quitaron: por más que se ajustaran las alturas,
+           las piezas se leían como elementos flotando sobre la mesa en vez de
+           una pizza. En su lugar va el modelo completo de pizza-optimized.glb
+           (ver la sección 12). */
+
+        const espatula = pieza('spatula', 0.36, M.spatula);
+        if (espatula) colocar(espatula, armado.pos[0] + 0.4, armado.top + 0.02, armado.pos[1] + 0.28, -0.4);
+
+        // La pala vive junto al horno, sobre la mesa auxiliar del fondo.
+        const pala = pieza('pizza_peel', 0.7, M.peel);
+        if (pala) colocar(pala, 0.7, 0.9, -3.25, 0.12);
+
+        const platoChico = pieza('woodenplate_small', 0.24, M.plato);
+        if (platoChico) colocar(platoChico, armado.pos[0] - 0.8, armado.top, armado.pos[1] - 0.3);
+
+        const pizzaLista = pieza('pizza1', 0.32, M.pizza1);
+        if (pizzaLista) colocar(pizzaLista, desp.pos[0] + 0.5, desp.top + 0.36, desp.pos[1]);
+
+        const pizzaRack = pieza('pizza2', 0.32, M.pizza2);
+        if (pizzaRack) colocar(pizzaRack, desp.pos[0] + 0.5, desp.top + 0.7, desp.pos[1]);
+    }, undefined, () => console.warn('[entorno-3d] sin foodpack'));
 }
 
-/* ---------------------------------------------------------------------------
-   9. COMANDA — el ticket del pedido
---------------------------------------------------------------------------- */
+function matProp(archivo, rough = 0.7, metal = 0, recorte = false) {
+    return new MeshStandardMaterial({
+        map: texturaProp(RUTA + 'texturas/' + archivo),
+        roughness: rough,
+        metalness: metal,
+        alphaTest: recorte ? 0.5 : 0,
+        side: recorte ? DoubleSide : FrontSide
+    });
+}
 
-class OrderScene extends Phaser.Scene {
+/* ==========================================================================
+   12 · COMIDA
+   El pepperoni y el queso se cargan por separado y pueden llegar antes o
+   después que la masa, así que cada uno intenta acomodarse cuando termina.
+   ========================================================================== */
+function cargarComida(loader) {
+    loader.load(RUTA + 'pizza-optimized.glb', g => {
+        const corte = porId('corte');
+        colocar(normalizar(g.scene, 0.34, 'max'),
+            corte.pos[0] + 0.55, corte.top + 0.05, corte.pos[1] + 0.02, Math.PI);
 
-    constructor() { super("OrderScene"); }
+        // Segunda pizza sobre la mesa de armado. Antes ahí había un montaje
+        // de piezas sueltas (plato, masa, quesos y pepperonis colocados uno
+        // por uno) que se veía flotando. Este modelo es una pizza entera.
+        const armado = porId('armado');
+        colocar(normalizar(g.scene, 0.42, 'max'),
+            armado.pos[0] - 0.5, armado.top + 0.04, armado.pos[1] + 0.16, 0.4);
+    }, undefined, () => console.warn('[entorno-3d] sin pizza'));
 
-    create() {
-        if (GameState.historialPedidos.length >= SESSION_ORDER_LIMIT) {
-            this.scene.start("SummaryScene");
+    /* Aquí se cargaban pepperoni.glb y shredded_cheese_melted.glb para
+       sembrarlos rebanada por rebanada sobre la masa cruda. Con la pizza
+       completa ya no hacen falta, y se quitaron también del proyecto:
+       eran 832 KB que se descargaban para no dibujar nada. */
+}
+
+/* ==========================================================================
+   13 · HITBOXES Y COLISIONES
+   ========================================================================== */
+function crearHitboxes() {
+    const invisible = new MeshBasicMaterial({ visible: false });
+    ESTACIONES.forEach(st => {
+        const [w, h, d] = st.hitbox;
+        const c = new Mesh(new BoxGeometry(w, h, d), invisible);
+        c.position.set(st.pos[0], st.top, st.pos[1]);
+        c.userData.estacion = st.id;
+        scene.add(c);
+        hitboxes.push(c);
+    });
+}
+
+function obstaculo(x, z, w, d, id = null) {
+    OBSTACULOS.push({ id, x0: x - w / 2, x1: x + w / 2, z0: z - d / 2, z1: z + d / 2 });
+}
+
+function registrarObstaculos() {
+    obstaculo(-0.3, -0.5, 2.1, 1.1);      // mesa de armado
+    obstaculo(-0.3, -1.12, 2.1, 0.5);     // barra de ingredientes
+    obstaculo(1.1, 2.1, 2.0, 1.1);        // mesa de corte
+    obstaculo(4.2, 2.6, 1.9, 1.0);        // despacho
+    obstaculo(-1.9, -2.95, 1.7, 1.6);     // horno
+    obstaculo(-1.85, -1.85, 1.6, 1.1);    // banda de salida
+    obstaculo(4.85, -3.3, 1.1, 0.85, 'frio');   // cámara fría
+    obstaculo(5.1, 0.3, 0.7, 2.9);        // estantería
+    obstaculo(-5.17, -0.7, 0.7, 0.7, 'lavado');   // lavamanos
+    obstaculo(-4.8, -2.8, 0.9, 0.9, 'residuos');  // bote de basura
+    obstaculo(-4.5, 2.40, 1.6, 1.3, 'recepcion');   // patín con palet y cajas
+    obstaculo(1.5, -3.25, 2.5, 0.8);      // mesa auxiliar
+}
+
+/** Choca contra muebles y paredes. Prueba cada eje por separado para que
+ *  al rozar una mesa el jugador se deslice en vez de quedarse pegado. */
+function moverConColision(nx, nz) {
+    const r = FP.radio;
+    const chocaX = OBSTACULOS.some(o => nx + r > o.x0 && nx - r < o.x1 && FP.pos.z + r > o.z0 && FP.pos.z - r < o.z1);
+    if (!chocaX) FP.pos.x = clamp(nx, -LIM_X + 0.4, LIM_X - 0.4);
+
+    const chocaZ = OBSTACULOS.some(o => FP.pos.x + r > o.x0 && FP.pos.x - r < o.x1 && nz + r > o.z0 && nz - r < o.z1);
+    if (!chocaZ) FP.pos.z = clamp(nz, -LIM_Z + 0.4, LIM_Z - 0.4);
+}
+
+/* ==========================================================================
+   14 · INTERFAZ
+   ========================================================================== */
+function construirInterfaz() {
+    elLista = document.querySelector('.station-list');
+    elDetalle = document.querySelector('.station-detail');
+    elBtnVista = document.getElementById('btnVistaGeneral');
+    elChips = document.getElementById('modeChips');
+    elHint = document.getElementById('viewerHint');
+    elReto = document.getElementById('retoPanel');
+
+    // Lista de estaciones, en orden de flujo
+    if (elLista) {
+        elLista.innerHTML = '';
+        ESTACIONES.forEach(st => {
+            const b = document.createElement('button');
+            b.type = 'button';
+            b.className = 'station-item';
+            b.dataset.estacion = st.id;
+            b.innerHTML = `<span class="station-step">${st.orden}</span><i class="${st.icono}"></i><span>${st.nombre}</span>`;
+            b.addEventListener('click', () => seleccionar(st.id, true));
+            elLista.appendChild(b);
+        });
+    }
+
+    if (elDetalle) {
+        elDetalle.innerHTML = `
+            <h6>Explora la cocina</h6>
+            <p>Arrastra para girar la vista y haz clic sobre cualquier zona para conocerla. También puedes elegirla en la lista de arriba.</p>`;
+    }
+
+    if (elBtnVista) {
+        elBtnVista.disabled = false;
+        elBtnVista.addEventListener('click', vistaGeneral);
+    }
+
+    // Barra de modos
+    if (elChips) {
+        elChips.querySelectorAll('[data-modo]').forEach(btn => {
+            btn.addEventListener('click', () => cambiarModo(btn.dataset.modo));
+        });
+    }
+
+    // Minimapa
+    mapaCanvas = document.getElementById('minimapa');
+    if (mapaCanvas) {
+        mapaCanvas.width = 220;
+        mapaCanvas.height = Math.round(220 * (COCINA.fondo / COCINA.ancho));
+        mapaCtx = mapaCanvas.getContext('2d');
+    }
+
+    crearControlesVisor();
+    actualizarHint();
+}
+
+/** Botón de pantalla completa y mira central. Se crean desde aquí para no
+ *  tener que tocar el HTML ni el CSS del módulo. */
+function crearControlesVisor() {
+    btnPantalla = document.createElement('button');
+    btnPantalla.type = 'button';
+    btnPantalla.title = 'Pantalla completa';
+    btnPantalla.setAttribute('aria-label', 'Pantalla completa');
+    btnPantalla.innerHTML = '<i class="bi bi-arrows-fullscreen"></i>';
+    Object.assign(btnPantalla.style, {
+        position: 'absolute', top: '12px', right: '12px', zIndex: '4',
+        width: '38px', height: '38px', borderRadius: '10px', cursor: 'pointer',
+        border: '1px solid rgba(255,255,255,.25)', background: 'rgba(0,34,68,.75)',
+        color: '#fff', fontSize: '15px', lineHeight: '1',
+        display: 'flex', alignItems: 'center', justifyContent: 'center'
+    });
+    btnPantalla.addEventListener('click', alternarPantallaCompleta);
+    contenedor.appendChild(btnPantalla);
+
+    // Mira: solo aparece con el mouse capturado, para saber a qué apuntas
+    // cuando ya no hay cursor en pantalla.
+    mira = document.createElement('div');
+    Object.assign(mira.style, {
+        position: 'absolute', left: '50%', top: '50%', zIndex: '4',
+        width: '14px', height: '14px', marginLeft: '-7px', marginTop: '-7px',
+        borderRadius: '50%', border: '2px solid rgba(255,255,255,.9)',
+        boxShadow: '0 0 0 1px rgba(0,0,0,.5)', pointerEvents: 'none', display: 'none'
+    });
+    contenedor.appendChild(mira);
+
+    document.addEventListener('fullscreenchange', onCambioPantalla);
+    document.addEventListener('webkitfullscreenchange', onCambioPantalla);
+}
+
+function alternarPantallaCompleta() {
+    const panel = contenedor.closest('.viewer-panel') || contenedor;
+    const activa = document.fullscreenElement || document.webkitFullscreenElement;
+    if (activa) (document.exitFullscreen || document.webkitExitFullscreen).call(document);
+    else (panel.requestFullscreen || panel.webkitRequestFullscreen)?.call(panel);
+}
+
+function onCambioPantalla() {
+    const activa = !!(document.fullscreenElement || document.webkitFullscreenElement);
+    if (btnPantalla) {
+        btnPantalla.innerHTML = activa
+            ? '<i class="bi bi-fullscreen-exit"></i>'
+            : '<i class="bi bi-arrows-fullscreen"></i>';
+        btnPantalla.title = activa ? 'Salir de pantalla completa' : 'Pantalla completa';
+    }
+    // El navegador reacomoda el layout después del evento, de ahí el respiro.
+    setTimeout(onResize, 90);
+}
+
+/* ---- Captura del mouse (Pointer Lock) --------------------------------------
+   Sin esto, girar en el recorrido depende de arrastrar dentro del visor y el
+   cursor se sale a la primera. Capturado, el mouse deja de existir como
+   cursor: giras sin tope y sin mantener el botón apretado. */
+function pedirBloqueoPuntero() {
+    const el = renderer.domElement;
+    try {
+        const r = (el.requestPointerLock || el.mozRequestPointerLock)?.call(el);
+        // Chrome devuelve una promesa. Si el navegador lo niega, se sigue
+        // usando el arrastre de siempre y no se rompe nada.
+        if (r && typeof r.catch === 'function') r.catch(() => { });
+    } catch (_) { /* respaldo: arrastre */ }
+}
+
+function soltarBloqueoPuntero() {
+    if (document.pointerLockElement) document.exitPointerLock?.();
+}
+
+function onCambioBloqueo() {
+    punteroBloqueado = document.pointerLockElement === renderer.domElement;
+    if (mira) mira.style.display = punteroBloqueado ? 'block' : 'none';
+    if (renderer) renderer.domElement.style.cursor = punteroBloqueado ? 'none' : 'grab';
+    if (!punteroBloqueado) arrastrando = false;
+}
+
+/** Rayo desde el centro exacto de la pantalla: es lo que apunta la mira. */
+function raycastCentro() {
+    if (!hitboxes.length) return null;
+    puntero.set(0, 0);
+    raycaster.setFromCamera(puntero, camara);
+    const hits = raycaster.intersectObjects(hitboxes, false);
+    return hits.length ? hits[0].object.userData.estacion : null;
+}
+
+function actualizarHint() {
+    if (!elHint) return;
+    const textos = {
+        explorar: 'Arrastra para girar · rueda para acercar · clic en una zona para ver su ficha',
+        recorrido: 'Haz clic para capturar el mouse y mirar libremente · W A S D o flechas para caminar · Esc para soltarlo',
+        reto: 'Lee la pregunta y haz clic en la estación correcta dentro de la cocina'
+    };
+    elHint.textContent = textos[modo];
+}
+
+function cambiarModo(nuevo) {
+    if (nuevo === modo) return;
+    modo = nuevo;
+
+    if (elChips) {
+        elChips.querySelectorAll('[data-modo]').forEach(b => {
+            b.classList.toggle('modo-activo', b.dataset.modo === modo);
+        });
+    }
+
+    if (modo === 'recorrido') {
+        // Entra caminando desde la puerta, a altura de persona
+        FP.pos.set(-0.3, 1.62, 3.0);
+        FP.yaw = Math.PI;
+        FP.pitch = -0.05;
+        camara.fov = 68;
+    } else {
+        camara.fov = 55;
+        FP.teclas = Object.create(null);
+        soltarBloqueoPuntero();
+    }
+    camara.updateProjectionMatrix();
+
+    if (modo === 'reto') iniciarReto();
+    else terminarReto();
+
+    if (modo === 'explorar') vistaGeneral();
+
+    actualizarHint();
+}
+
+function pintarDetalle(st) {
+    if (!elDetalle) return;
+    elDetalle.innerHTML = `
+        <div class="detalle-cabeza">
+            <span class="station-step station-step-lg">${st.orden}</span>
+            <h6>${st.nombre}</h6>
+        </div>
+        <p>${st.resumen}</p>
+        <p class="detalle-subtitulo">Qué haces aquí</p>
+        <ul class="detalle-tareas">${st.tareas.map(t => `<li>${t}</li>`).join('')}</ul>
+        <div class="station-tip"><i class="bi bi-lightbulb-fill"></i><span>${st.tip}</span></div>`;
+}
+
+function seleccionar(id, volar = true) {
+    const st = porId(id);
+    if (!st) return;
+
+    estacionActiva = id;
+
+    if (elLista) {
+        elLista.querySelectorAll('.station-item').forEach(b => {
+            b.classList.toggle('station-active', b.dataset.estacion === id);
+        });
+        const activo = elLista.querySelector('.station-active');
+        if (activo) activo.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+
+    pintarDetalle(st);
+    resaltarMarcador(id);
+
+    if (volar && modo !== 'recorrido') volarA(st);
+}
+
+function resaltarMarcador(id) {
+    marcadores.forEach((anillo, key) => {
+        const activo = key === id;
+        anillo.material.color.setHex(activo ? PALETA.rojo : PALETA.azul);
+        anillo.material.opacity = activo ? 0.9 : 0.32;
+        anillo.scale.setScalar(activo ? 1.12 : 1);
+    });
+}
+
+/* ==========================================================================
+   15 · MODO RETO
+   ========================================================================== */
+function iniciarReto() {
+    reto.orden = PREGUNTAS.map((_, i) => i).sort(() => Math.random() - 0.5);
+    reto.indice = 0;
+    reto.aciertos = 0;
+    reto.intentos = 0;
+    reto.activo = true;
+    reto.bloqueado = false;
+    if (elReto) elReto.hidden = false;
+    marcadores.forEach(a => { a.material.color.setHex(PALETA.azul); a.material.opacity = 0.32; a.scale.setScalar(1); });
+    pintarPregunta();
+}
+
+function terminarReto() {
+    reto.activo = false;
+    if (elReto) elReto.hidden = true;
+}
+
+function pintarPregunta() {
+    if (!elReto) return;
+    if (reto.indice >= reto.orden.length) {
+        const pct = Math.round((reto.aciertos / Math.max(reto.intentos, 1)) * 100);
+        elReto.innerHTML = `
+            <div class="reto-cabeza"><i class="bi bi-trophy-fill"></i><span>Reto terminado</span></div>
+            <p class="reto-pregunta">Acertaste ${reto.aciertos} de ${reto.orden.length} · ${pct}% de precisión</p>
+            <button type="button" class="btn btn-sm btn-outline-primary w-100" id="btnRepetirReto">Volver a intentar</button>`;
+        const b = document.getElementById('btnRepetirReto');
+        if (b) b.addEventListener('click', iniciarReto);
+        return;
+    }
+
+    const p = PREGUNTAS[reto.orden[reto.indice]];
+    elReto.innerHTML = `
+        <div class="reto-cabeza">
+            <span><i class="bi bi-question-circle-fill"></i> Pregunta ${reto.indice + 1} de ${reto.orden.length}</span>
+            <span class="reto-marcador">${reto.aciertos} / ${reto.intentos}</span>
+        </div>
+        <p class="reto-pregunta">${p.texto}</p>
+        <p class="reto-ayuda">Haz clic en la estación correcta dentro de la cocina.</p>`;
+}
+
+function responderReto(idElegido) {
+    if (reto.bloqueado || reto.indice >= reto.orden.length) return;
+    const p = PREGUNTAS[reto.orden[reto.indice]];
+    const correcto = idElegido === p.id;
+
+    reto.intentos++;
+    if (correcto) reto.aciertos++;
+    reto.bloqueado = true;
+
+    const st = porId(p.id);
+    const anillo = marcadores.get(p.id);
+    if (anillo) {
+        anillo.material.color.setHex(correcto ? 0x13b97d : PALETA.rojo);
+        anillo.material.opacity = 0.95;
+        anillo.scale.setScalar(1.2);
+    }
+    if (!correcto) {
+        const equivocado = marcadores.get(idElegido);
+        if (equivocado) { equivocado.material.color.setHex(PALETA.rojo); equivocado.material.opacity = 0.9; }
+    }
+
+    if (elReto) {
+        elReto.innerHTML = `
+            <div class="reto-cabeza">
+                <span><i class="bi ${correcto ? 'bi-check-circle-fill' : 'bi-x-circle-fill'}"></i> ${correcto ? 'Correcto' : 'Esa no era'}</span>
+                <span class="reto-marcador">${reto.aciertos} / ${reto.intentos}</span>
+            </div>
+            <p class="reto-pregunta">${correcto ? st.nombre : `La respuesta era <strong>${st.nombre}</strong> (paso ${st.orden})`}</p>
+            <p class="reto-ayuda">${st.resumen}</p>`;
+        elReto.classList.toggle('reto-ok', correcto);
+        elReto.classList.toggle('reto-mal', !correcto);
+    }
+
+    volarA(st);
+
+    setTimeout(() => {
+        reto.indice++;
+        reto.bloqueado = false;
+        if (elReto) elReto.classList.remove('reto-ok', 'reto-mal');
+        marcadores.forEach(a => { a.material.color.setHex(PALETA.azul); a.material.opacity = 0.32; a.scale.setScalar(1); });
+        pintarPregunta();
+    }, 2600);
+}
+
+/* ==========================================================================
+   16 · CÁMARA
+   ========================================================================== */
+function volarA(st) {
+    const [w, h, d] = st.hitbox;
+    const radio = clamp(new Vector3(w, h, d).length() * 0.75 + 0.7, 1.8, 4.2);
+    const objetivo = new Vector3(st.pos[0], st.top, st.pos[1]);
+
+    // Nos acercamos siempre desde el centro de la cocina, así nunca
+    // terminamos con la cámara metida dentro de una pared.
+    const dir = new Vector3(0, 0, 0).sub(objetivo);
+    dir.y = 0;
+    if (dir.lengthSq() < 0.0001) dir.set(0, 0, 1); else dir.normalize();
+
+    const destino = objetivo.clone().addScaledVector(dir, radio);
+    destino.y = st.top + clamp(h * 0.45 + 0.35, 0.5, 1.6);
+
+    animarCamara(destino, objetivo.clone());
+}
+
+function vistaGeneral() {
+    estacionActiva = null;
+    marcadores.forEach(a => { a.material.color.setHex(PALETA.azul); a.material.opacity = 0.32; a.scale.setScalar(1); });
+    if (elLista) elLista.querySelectorAll('.station-item').forEach(b => b.classList.remove('station-active'));
+    animarCamara(VISTA_GENERAL.pos.clone(), VISTA_GENERAL.target.clone());
+}
+
+function animarCamara(pos, target) {
+    if (modo === 'recorrido') return;
+    camAnim = {
+        t0: performance.now(), dur: 850,
+        desdePos: camara.position.clone(), haciaPos: pos,
+        desdeTarget: orbitTarget.clone(), haciaTarget: target
+    };
+}
+
+function sincronizarOrbita(pos, target) {
+    orbitTarget.copy(target);
+    const rel = new Vector3().subVectors(pos, target);
+    orbitRadius = rel.length() || 1;
+    orbitPhi = Math.acos(clamp(rel.y / orbitRadius, -1, 1));
+    orbitTheta = Math.atan2(rel.x, rel.z);
+}
+
+/* ==========================================================================
+   17 · EVENTOS
+   ========================================================================== */
+function conectarEventos() {
+    const lienzo = renderer.domElement;
+    lienzo.addEventListener('pointerdown', onPointerDown);
+    lienzo.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    lienzo.addEventListener('wheel', onWheel, { passive: false });
+    lienzo.addEventListener('contextmenu', e => e.preventDefault());
+
+    document.addEventListener('pointerlockchange', onCambioBloqueo);
+    document.addEventListener('pointerlockerror', onCambioBloqueo);
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup', onKeyUp);
+    window.addEventListener('resize', onResize);
+    window.addEventListener('blur', () => { FP.teclas = Object.create(null); });
+}
+
+function onPointerDown(e) {
+    if (modo === 'recorrido') {
+        if (punteroBloqueado) {
+            // Ya con el mouse capturado, el clic selecciona lo que marca la mira.
+            const id = raycastCentro();
+            if (id) seleccionar(id, false);
             return;
         }
+        // Primer clic dentro del visor: capturamos el mouse. Seguimos armando
+        // el arrastre como respaldo por si el navegador no concede la captura.
+        pedirBloqueoPuntero();
+    }
 
-        UI.fondo(this);
-        UI.entrar(this);
+    arrastrando = true;
+    camAnim = null;
+    ultimoPuntero = { x: e.clientX, y: e.clientY };
+    inicioPuntero = { x: e.clientX, y: e.clientY };
+    try { renderer.domElement.setPointerCapture?.(e.pointerId); } catch (_) { /* lo lleva la captura */ }
+}
 
-        GameState.pedidoNumero += 1;
-        const order = generarPedidoAleatorio();
-        this.registry.set("currentOrder", order);
+function onPointerMove(e) {
+    // Con el mouse capturado no hay cursor ni bordes: giramos con el
+    // desplazamiento crudo del ratón, sin importar si hay botón apretado.
+    if (punteroBloqueado) {
+        FP.yaw -= (e.movementX || 0) * 0.0024;
+        FP.pitch = clamp(FP.pitch - (e.movementY || 0) * 0.0024, -0.9, 0.75);
+        return;
+    }
+    if (!arrastrando) {
+        renderer.domElement.style.cursor = raycastEstacion(e) ? 'pointer' : 'grab';
+        return;
+    }
+    const dx = e.clientX - ultimoPuntero.x;
+    const dy = e.clientY - ultimoPuntero.y;
+    ultimoPuntero = { x: e.clientX, y: e.clientY };
 
-        const top = UI.hud(this, "Comanda recibida");
-        UI.procedimiento(this, 0);
+    if (modo === 'recorrido') {
+        FP.yaw -= dx * 0.0045;
+        FP.pitch = clamp(FP.pitch - dy * 0.0045, -0.9, 0.75);
+    } else {
+        orbitTheta -= dx * 0.006;
+        orbitPhi = clamp(orbitPhi - dy * 0.006, 0.18, 1.48);
+    }
+    renderer.domElement.style.cursor = 'grabbing';
+}
 
-        const cx = LAY.centroX;
+function onPointerUp(e) {
+    // Con el mouse capturado la selección ya la hizo onPointerDown con la mira.
+    if (punteroBloqueado) { arrastrando = false; return; }
+    if (!arrastrando) return;
+    const movio = Math.hypot(e.clientX - inicioPuntero.x, e.clientY - inicioPuntero.y);
+    arrastrando = false;
+    renderer.domElement.style.cursor = 'grab';
 
-        UI.titulo(this, cx, top + 28, "Pedido entrante", "LEE LA COMANDA", 0.5, 34);
-
-        /* ---- Ticket de impresora ---- */
-        const tW = 340, tH = 356, tX = cx - tW / 2, tY = top + 106;
-
-        const paper = this.add.graphics();
-        paper.fillStyle(C.cream, 1);
-        paper.fillRoundedRect(tX, tY, tW, tH, 4);
-        paper.fillStyle(C.night, 1);
-        for (let x = tX; x < tX + tW; x += 12) paper.fillCircle(x + 6, tY + tH, 6);
-
-        const grupo = this.add.container(0, 0);
-
-        const linea = (y, txt, opts = {}) => {
-            const t = this.add.text(opts.centro ? cx : tX + 26, tY + y, txt, {
-                fontFamily: FONT_TICKET,
-                fontSize: (opts.size || 15) + "px",
-                fontStyle: opts.bold ? "bold" : "normal",
-                color: opts.color || "#2b2118"
-            }).setOrigin(opts.centro ? 0.5 : 0, 0);
-            grupo.add(t);
-            return t;
-        };
-
-        linea(22, "DOMINO'S · CAPACITACIÓN", { centro: true, size: 12, bold: true, color: "#8a7359" });
-        linea(44, `TICKET ${String(GameState.pedidoNumero).padStart(3, "0")}`, { centro: true, size: 24, bold: true });
-
-        const sep = this.add.text(cx, tY + 82, "- ".repeat(23), {
-            fontFamily: FONT_TICKET, fontSize: "13px", color: "#b3a288"
-        }).setOrigin(0.5, 0);
-        grupo.add(sep);
-
-        linea(108, "1x PIZZA MEDIANA", { bold: true, size: 17 });
-
-        let y = 142;
-        const filas = [];
-        if (order.sauce)  filas.push("salsa");
-        if (order.cheese) filas.push("queso");
-        order.toppings.forEach(k => filas.push(k));
-
-        filas.forEach((k, i) => {
-            const t = linea(y, `  + ${NOMBRES[k]}`, { size: 16 });
-            t.setAlpha(0);
-            this.tweens.add({ targets: t, alpha: 1, x: t.x + 8, duration: 220 * MOTION,
-                delay: (260 + i * 90) * MOTION });
-            y += 28;
-        });
-
-        linea(tH - 48, `SIN: ${TOPPING_KEYS.filter(k => !order.toppings.includes(k)).length} ingredientes`, {
-            centro: true, size: 12, color: "#8a7359"
-        });
-
-        // El ticket "sale de la impresora".
-        const stack = this.add.container(0, 0, [paper, grupo]);
-        stack.setY(-48).setAlpha(0);
-        this.tweens.add({ targets: stack, y: 0, alpha: 1, duration: 420 * MOTION, ease: "Cubic.out" });
-        SFX.spread();
-
-        const ir = () => UI.irA(this, "AssemblyScene");
-        UI.boton(this, cx, tY + tH + 62, 300, 58, "Empezar a armar", ir, { tono: "red", size: 17 });
-        this.input.keyboard.on("keydown-SPACE", ir);
+    if (movio < 6) {
+        const id = raycastEstacion(e);
+        if (!id) return;
+        if (modo === 'reto') { responderReto(id); seleccionar(id, false); }
+        else seleccionar(id, modo !== 'recorrido');
     }
 }
 
-/* ---------------------------------------------------------------------------
-   10. ARMADO — drag & drop sobre la pizza
---------------------------------------------------------------------------- */
-
-class AssemblyScene extends Phaser.Scene {
-
-    constructor() { super("AssemblyScene"); }
-
-    create() {
-        UI.fondo(this);
-        UI.entrar(this);
-
-        this.order = this.registry.get("currentOrder");
-        this.pizzaState = { sauce: false, cheese: false, toppings: {} };
-        TOPPING_KEYS.forEach(k => this.pizzaState.toppings[k] = 0);
-        this.historial = [];
-        this.arrastre = null;
-        this.tiempoArmado = 0;
-        this.pasoActual = 1;
-
-        UI.hud(this, "Arma según la comanda");
-        UI.procedimiento(this, 1);
-
-        /* ---- Tabla y pizza al centro ---- */
-        this.px = LAY.centroX;
-        this.py = LAY.centroY;
-        this.radioPizza = 150;
-
-        this.add.image(this.px, this.py, "tabla").setScale(0.98);
-        this.add.image(this.px, this.py + 158, "sombra_suave").setAlpha(0.4);
-
-        this.pizza = this.add.container(this.px, this.py);
-        this.pizza.add(this.add.image(0, 0, "masa_corteza"));
-        this.pizza.add(this.add.image(0, 0, "masa_base"));
-
-        this.guia = this.add.graphics();
-        this.dibujarGuia(false);
-
-        this.imgSalsa = null;
-        this.imgQueso = null;
-
-        this.crearColumnaIzquierda();
-        this.crearMesa();
-        this.registrarEntrada();
-
-        this.refrescarUI();
-    }
-
-    /* ---------- Columna izquierda: comanda viva + avance ---------- */
-
-    crearColumnaIzquierda() {
-        const x = LAY.izqX, y = LAY.filaY, w = LAY.colW, h = LAY.filaH;
-        UI.panel(this, x, y, w, h);
-
-        this.add.text(x + 18, y + 18, "COMANDA", {
-            fontFamily: FONT_BODY, fontSize: "11px", fontStyle: "bold",
-            color: H("red"), letterSpacing: 3
-        });
-
-        this.add.text(x + 18, y + 32, `Ticket ${String(GameState.pedidoNumero).padStart(3, "0")}`, {
-            fontFamily: FONT_DISPLAY, fontSize: "22px", color: H("text")
-        });
-
-        this.requeridos = [];
-        if (this.order.sauce)  this.requeridos.push("salsa");
-        if (this.order.cheese) this.requeridos.push("queso");
-        this.order.toppings.forEach(k => this.requeridos.push(k));
-
-        this.filasRiel = {};
-        let fy = y + 76;
-
-        this.requeridos.forEach(key => {
-            const marca = this.add.text(x + 22, fy, "○", {
-                fontFamily: FONT_BODY, fontSize: "16px", color: H("muted")
-            }).setOrigin(0, 0.5);
-
-            const nombre = this.add.text(x + 48, fy, NOMBRES[key], {
-                fontFamily: FONT_TICKET, fontSize: "15px", color: H("text")
-            }).setOrigin(0, 0.5);
-
-            const tachado = this.add.graphics();
-            this.filasRiel[key] = { marca, nombre, tachado, y: fy, x: x + 48 };
-            fy += 26;
-        });
-
-        /* Aviso de ingredientes fuera de la comanda.
-           Iba en el rojo de marca a 12 px sobre panel oscuro y casi no se
-           veía. Ahora usa el rojo claro, sube a 13 px y va en negritas: es
-           una corrección que el empleado tiene que alcanzar a leer. */
-        this.avisoExtra = this.add.text(x + 18, y + 226, "", {
-            fontFamily: FONT_BODY, fontSize: "13px", fontStyle: "bold",
-            color: H("redText"), wordWrap: { width: w - 36 }
-        });
-
-        // Separador entre comanda y avance.
-        const sep = this.add.graphics();
-        sep.lineStyle(1, C.line, 0.8);
-        sep.beginPath();
-        sep.moveTo(x + 18, y + 262);
-        sep.lineTo(x + w - 18, y + 262);
-        sep.strokePath();
-
-        this.add.text(x + 18, y + 272, "AVANCE", {
-            fontFamily: FONT_BODY, fontSize: "11px", fontStyle: "bold",
-            color: H("blue"), letterSpacing: 3
-        });
-
-        // El cronómetro comparte renglón con el rótulo: gana el espacio que
-        // necesita el anillo, y las dos medidas quedan a la misma altura.
-        this.cronoTxt = this.add.text(x + w - 18, y + 271, "0.0 s", {
-            fontFamily: FONT_TICKET, fontSize: "13px", color: H("muted")
-        }).setOrigin(1, 0);
-
-        /* ---- Anillo de coincidencia.
-           Aro ancho, trazo delgado y número más chico: el porcentaje necesita
-           aire dentro del aro, si no queda pegado al trazo y no se lee. ---- */
-        this.anilloX = x + w / 2;
-        this.anilloY = y + 342;
-        this.anilloR = 52;
-        this.anilloGrosor = 9;
-
-        this.anillo = this.add.graphics();
-
-        this.anilloTxt = this.add.text(this.anilloX, this.anilloY, "0%", {
-            fontFamily: FONT_DISPLAY, fontSize: "28px", color: H("text")
-        }).setOrigin(0.5);
-
-        this.add.text(this.anilloX, this.anilloY + this.anilloR + 12, "COINCIDENCIA", {
-            fontFamily: FONT_BODY, fontSize: "10px", fontStyle: "bold",
-            color: H("muted"), letterSpacing: 2
-        }).setOrigin(0.5, 0);
-    }
-
-    /* ---------- Mesa de ingredientes + acciones ---------- */
-
-    crearMesa() {
-        const x = LAY.pad, y = LAY.mesaY, w = GAME_WIDTH - LAY.pad * 2, h = LAY.mesaB - LAY.mesaY;
-        UI.panel(this, x, y, w, h, { fill: C.panelSoft, alpha: 0.5, borde: C.line });
-
-        this.add.text(x + 20, y + 14, "MESA DE INGREDIENTES", {
-            fontFamily: FONT_BODY, fontSize: "10px", fontStyle: "bold",
-            color: H("muted"), letterSpacing: 3
-        });
-
-        const cols = 4, bw = 214, bh = 88, gx = 14, gy = 12;
-        const sx = x + 16;
-        const sy = y + 34;
-
-        this.botes = {};
-
-        INGREDIENTS.forEach((ing, i) => {
-            const col = i % cols, row = Math.floor(i / cols);
-            const bx = sx + col * (bw + gx) + bw / 2;
-            const by = sy + row * (bh + gy) + bh / 2;
-            this.botes[ing.key] = this.crearBote(ing, bx, by, bw, bh, i + 1);
-        });
-
-        /* ---- Acciones, a la derecha de la mesa ---- */
-        const ax = sx + cols * (bw + gx) + 8;   // inicio de la columna de acciones
-        const aw = GAME_WIDTH - LAY.pad - 16 - ax;
-        const acx = ax + aw / 2;
-
-        const divisor = this.add.graphics();
-        divisor.lineStyle(1, C.line, 0.7);
-        divisor.beginPath();
-        divisor.moveTo(ax - 8, y + 34);
-        divisor.lineTo(ax - 8, y + h - 20);
-        divisor.strokePath();
-
-        this.btnUndo = UI.boton(this, acx - aw / 4 - 4, sy + 40, aw / 2 - 10, 46, "Deshacer",
-            () => this.deshacer(), { tono: "ghost", size: 13 });
-
-        this.btnReset = UI.boton(this, acx + aw / 4 + 4, sy + 40, aw / 2 - 10, 46, "Vaciar",
-            () => this.reiniciar(), { tono: "ghost", size: 13 });
-
-        this.btnHorno = UI.boton(this, acx, sy + 128, aw - 12, 62, "Al horno",
-            () => this.alHorno(), { tono: "red", size: 17 });
-    }
-
-    crearBote(ing, x, y, w, h, numero) {
-        const cont = this.add.container(x, y);
-
-        const g = this.add.graphics();
-        const pintar = (estado) => {
-            g.clear();
-            g.fillStyle(estado === "hover" ? C.line : C.panel, 1);
-            g.fillRoundedRect(-w / 2, -h / 2, w, h, 12);
-            g.lineStyle(estado === "hover" ? 2 : 1.5,
-                ing.type === "topping" ? C.blueDeep : C.red, 1);
-            g.strokeRoundedRect(-w / 2, -h / 2, w, h, 12);
-            g.fillStyle(ing.type === "topping" ? C.blue : C.red, 1);
-            g.fillRoundedRect(-w / 2 + 5, -h / 2 + 12, 4, h - 24, 2);
-        };
-        pintar("idle");
-
-        const icono = this.add.image(-w / 2 + 40, 0, "ing_" + ing.key).setScale(1.5 * ING_K);
-
-        this.add.text(0, 0, "");   // reserva de orden de dibujo
-
-        const nombre = this.add.text(-w / 2 + 68, -18, ing.name, {
-            fontFamily: FONT_BODY, fontSize: "16px", fontStyle: "bold", color: H("text")
-        });
-
-        /* El verbo dice qué hace el control y cuántas piezas pide.
-           Antes el atajo iba escrito como "· tecla 3" en gris a 11 px y se
-           perdía. Ahora el verbo sube de tamaño y de contraste, y la tecla
-           se dibuja como una tecla: así se reconoce de un vistazo, sin
-           leerla. */
-        const pista = ing.type === "topping"
-            ? `${ing.accion} ${MIN_PIEZAS_VALIDAS}+`
-            : ing.accion;
-
-        const accion = this.add.text(-w / 2 + 68, 5, pista, {
-            fontFamily: FONT_BODY, fontSize: "12px", color: H("mutedHi")
-        });
-
-        // Tecla física, dibujada como tapa de teclado.
-        const anchoTexto = accion.width;
-        const tx = -w / 2 + 68 + anchoTexto + 10;
-        const ty = 5;
-
-        const tapa = this.add.graphics();
-        tapa.fillStyle(C.night, 0.85);
-        tapa.fillRoundedRect(tx, ty - 1, 17, 17, 4);
-        tapa.lineStyle(1.5, C.line, 1);
-        tapa.strokeRoundedRect(tx, ty - 1, 17, 17, 4);
-
-        const tecla = this.add.text(tx + 8.5, ty + 7.5, String(numero), {
-            fontFamily: FONT_BODY, fontSize: "12px", fontStyle: "bold",
-            color: H("text")
-        }).setOrigin(0.5);
-
-        const contador = this.add.text(w / 2 - 16, 0, "", {
-            fontFamily: FONT_DISPLAY, fontSize: "17px", color: H("mint")
-        }).setOrigin(1, 0.5);
-
-        const hit = this.add.rectangle(0, 0, w, h, 0xffffff, 0).setInteractive({ useHandCursor: true });
-
-        cont.add([g, icono, nombre, accion, tapa, tecla, contador, hit]);
-
-        hit.on("pointerover", () => { pintar("hover"); this.tweens.add({ targets: cont, y: y - 3, duration: 110 * MOTION }); });
-        hit.on("pointerout",  () => { pintar("idle");  this.tweens.add({ targets: cont, y: y, duration: 110 * MOTION }); });
-
-        hit.on("pointerdown", (p) => {
-            SFX.ensure();
-            if (ing.type === "topping") this.iniciarArrastre(ing, p);
-            else this.aplicarCapa(ing);
-        });
-
-        return { cont, contador, icono, pintar, ing };
-    }
-
-    /* ---------- Entrada ---------- */
-
-    registrarEntrada() {
-        this.input.on("pointermove", (p) => {
-            if (!this.arrastre) return;
-            this.arrastre.setPosition(p.x, p.y);
-            const dentro = Phaser.Math.Distance.Between(p.x, p.y, this.px, this.py) <= this.radioPizza;
-            this.arrastre.setAlpha(dentro ? 1 : 0.55);
-            this.dibujarGuia(dentro);
-        });
-
-        this.input.on("pointerup", (p) => this.soltarArrastre(p));
-
-        const TECLAS = ["ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT"];
-        INGREDIENTS.forEach((ing, i) => {
-            if (!TECLAS[i]) return;
-            this.input.keyboard.on("keydown-" + TECLAS[i], () => {
-                this.destacarBote(ing.key);
-                if (ing.type === "topping") this.servirRapido(ing);
-                else this.aplicarCapa(ing);
-            });
-        });
-
-        this.input.keyboard.on("keydown-Z", () => this.deshacer());
-        this.input.keyboard.on("keydown-R", () => this.reiniciar());
-        this.input.keyboard.on("keydown-SPACE", () => this.alHorno());
-    }
-
-    destacarBote(key) {
-        const bote = this.botes[key];
-        if (!bote) return;
-        this.tweens.add({ targets: bote.cont, scale: 1.05, duration: 90 * MOTION, yoyo: true });
-    }
-
-    /* ---------- Capas ---------- */
-
-    aplicarCapa(ing) {
-        SFX.ensure();
-
-        if (ing.type === "sauce") {
-            if (this.pizzaState.sauce) { SFX.denied(); this.avisar("La salsa ya está untada"); return; }
-            this.pizzaState.sauce = true;
-
-            this.imgSalsa = this.add.image(0, 0, "salsa").setAlpha(0);
-            this.pizza.add(this.imgSalsa);
-            this.tweens.add({ targets: this.imgSalsa, alpha: 1, duration: 380 * MOTION });
-
-            const esp = this.add.image(0, 0, "salsa_espiral").setScale(0.2).setAlpha(0.9).setAngle(-180);
-            this.pizza.add(esp);
-            this.tweens.add({
-                targets: esp, scale: 1, angle: 0, duration: 520 * MOTION, ease: "Cubic.out",
-                onComplete: () => this.tweens.add({
-                    targets: esp, alpha: 0, duration: 320 * MOTION,
-                    onComplete: () => esp.destroy()
-                })
-            });
-
-            this.historial.push({ tipo: "sauce", obj: this.imgSalsa });
-            SFX.spread();
-            this.refrescarUI();
-            return;
-        }
-
-        if (ing.type === "cheese") {
-            if (!this.pizzaState.sauce) { SFX.denied(); this.avisar("Primero va la salsa"); return; }
-            if (this.pizzaState.cheese) { SFX.denied(); this.avisar("El queso ya está esparcido"); return; }
-            this.pizzaState.cheese = true;
-
-            this.imgQueso = this.add.image(0, 0, "queso").setScale(0.5).setAlpha(0);
-            this.pizza.add(this.imgQueso);
-            this.tweens.add({ targets: this.imgQueso, scale: 1, alpha: 1, duration: 420 * MOTION, ease: "Back.out" });
-
-            for (let i = 0; i < 14; i++) {
-                const a = Math.random() * Math.PI * 2, r = Math.random() * 110;
-                const bit = this.add.image(this.px + randInt(-34, 34), this.py - 190, "chispa")
-                    .setScale(randInt(4, 9) / 10).setTint(0xf7e6b4);
-                this.tweens.add({
-                    targets: bit,
-                    x: this.px + Math.cos(a) * r, y: this.py + Math.sin(a) * r,
-                    alpha: 0, duration: (340 + Math.random() * 240) * MOTION,
-                    delay: i * 22 * MOTION, ease: "Cubic.in",
-                    onComplete: () => bit.destroy()
-                });
-            }
-
-            this.historial.push({ tipo: "cheese", obj: this.imgQueso });
-            SFX.spread();
-            this.refrescarUI();
-        }
-    }
-
-    /* ---------- Toppings ---------- */
-
-    iniciarArrastre(ing, p) {
-        if (!this.puedeTopping(ing)) return;
-        this.arrastre = this.add.image(p.x, p.y, "ing_" + ing.key).setScale(1.7 * ING_K).setDepth(999);
-        this.arrastre.ingKey = ing.key;
-        this.tweens.add({ targets: this.arrastre, scale: 1.25 * ING_K, duration: 140 * MOTION });
-    }
-
-    soltarArrastre(p) {
-        if (!this.arrastre) return;
-        const key = this.arrastre.ingKey;
-        const dentro = Phaser.Math.Distance.Between(p.x, p.y, this.px, this.py) <= this.radioPizza;
-
-        this.arrastre.destroy();
-        this.arrastre = null;
-        this.dibujarGuia(false);
-
-        if (!dentro) { SFX.denied(); return; }
-        this.colocarTopping(key, p.x - this.px, p.y - this.py);
-    }
-
-    servirRapido(ing) {
-        if (!this.puedeTopping(ing)) return;
-        const a = Math.random() * Math.PI * 2, r = Math.random() * (this.radioPizza - 28);
-        this.colocarTopping(ing.key, Math.cos(a) * r, Math.sin(a) * r);
-    }
-
-    puedeTopping(ing) {
-        if (!this.pizzaState.sauce) { SFX.denied(); this.avisar("Primero va la salsa"); return false; }
-        if (this.pizzaState.toppings[ing.key] >= MAX_PIEZAS_POR_TOPPING) {
-            SFX.denied(); this.avisar(`Ya hay suficiente ${ing.name.toLowerCase()}`); return false;
-        }
-        return true;
-    }
-
-    colocarTopping(key, ox, oy) {
-        const pieza = this.add.image(ox, oy, "ing_" + key)
-            .setAngle(randInt(0, 359)).setScale(2.1 * ING_K).setAlpha(0.4);
-        this.pizza.add(pieza);
-        // El tamaño final SIEMPRE va multiplicado por ING_K. Si aquí quedara
-        // "scale: 1", la pieza terminaría midiendo los 256 px del PNG.
-        this.tweens.add({ targets: pieza, scale: ING_K, alpha: 1, duration: 240 * MOTION, ease: "Back.out" });
-
-        this.pizzaState.toppings[key] += 1;
-        this.historial.push({ tipo: "topping", key, obj: pieza });
-        SFX.place();
-        this.refrescarUI();
-    }
-
-    /* ---------- Deshacer / vaciar ---------- */
-
-    deshacer() {
-        const u = this.historial.pop();
-        if (!u) { SFX.denied(); return; }
-
-        if (u.tipo === "sauce") {
-            // Quitar la salsa arrastra consigo todo lo que quedó encima.
-            this.historial = [];
-            this.pizza.list.slice(2).forEach(o => o.destroy());
-            this.pizzaState.sauce = false;
-            this.pizzaState.cheese = false;
-            TOPPING_KEYS.forEach(k => this.pizzaState.toppings[k] = 0);
-            this.imgSalsa = null;
-            this.imgQueso = null;
-        } else if (u.tipo === "cheese") {
-            u.obj.destroy();
-            this.pizzaState.cheese = false;
-            this.imgQueso = null;
-        } else {
-            u.obj.destroy();
-            this.pizzaState.toppings[u.key] -= 1;
-        }
-
-        SFX.click();
-        this.refrescarUI();
-    }
-
-    reiniciar() {
-        if (!this.historial.length) { SFX.denied(); return; }
-        this.pizza.list.slice(2).forEach(o => o.destroy());
-        this.historial = [];
-        this.pizzaState = { sauce: false, cheese: false, toppings: {} };
-        TOPPING_KEYS.forEach(k => this.pizzaState.toppings[k] = 0);
-        this.imgSalsa = null;
-        this.imgQueso = null;
-        SFX.spread();
-        this.refrescarUI();
-    }
-
-    /* ---------- Estado visual ---------- */
-
-    dibujarGuia(activa) {
-        this.guia.clear();
-        this.guia.lineStyle(activa ? 3 : 1.5, activa ? C.mint : C.line, activa ? 0.9 : 0.3);
-        this.guia.strokeCircle(this.px, this.py, this.radioPizza);
-    }
-
-    estaPuesto(key) {
-        if (key === "salsa") return this.pizzaState.sauce;
-        if (key === "queso") return this.pizzaState.cheese;
-        return this.pizzaState.toppings[key] >= MIN_PIEZAS_VALIDAS;
-    }
-
-    refrescarUI() {
-        // Contadores de los botes
-        TOPPING_KEYS.forEach(k => {
-            const n = this.pizzaState.toppings[k];
-            const bote = this.botes[k];
-            if (!bote) return;
-            bote.contador.setText(n ? `${n}/${MIN_PIEZAS_VALIDAS}` : "");
-            bote.contador.setColor(n >= MIN_PIEZAS_VALIDAS ? H("mint") : H("amber"));
-        });
-        if (this.botes.salsa) this.botes.salsa.contador.setText(this.pizzaState.sauce ? "✔" : "");
-        if (this.botes.queso) this.botes.queso.contador.setText(this.pizzaState.cheese ? "✔" : "");
-
-        // Comanda viva: tachar lo que ya está
-        let listos = 0;
-        this.requeridos.forEach(key => {
-            const fila = this.filasRiel[key];
-            const ok = this.estaPuesto(key);
-            if (ok) listos++;
-            fila.marca.setText(ok ? "✔" : "○").setColor(ok ? H("mint") : H("muted"));
-            fila.nombre.setColor(ok ? H("muted") : H("text"));
-            fila.tachado.clear();
-            if (ok) {
-                fila.tachado.lineStyle(1.5, C.mint, 0.8);
-                fila.tachado.beginPath();
-                fila.tachado.moveTo(fila.x, fila.y);
-                fila.tachado.lineTo(fila.x + fila.nombre.width, fila.y);
-                fila.tachado.strokePath();
-            }
-        });
-
-        // Ingredientes fuera de la comanda
-        const sobrantes = TOPPING_KEYS
-            .filter(k => this.pizzaState.toppings[k] > 0 && !this.order.toppings.includes(k))
-            .map(k => NOMBRES[k]);
-        if (this.pizzaState.cheese && !this.order.cheese) sobrantes.unshift(NOMBRES.queso);
-        this.avisoExtra.setText(sobrantes.length ? `No van: ${sobrantes.join(", ")}` : "");
-
-        // Anillo de coincidencia
-        const pct = this.requeridos.length ? listos / this.requeridos.length : 0;
-        const valor = Math.max(0, Math.min(1, pct - sobrantes.length * 0.12));
-        this.dibujarAnillo(valor);
-        this.anilloTxt.setText(Math.round(valor * 100) + "%");
-        this.anilloTxt.setColor(valor >= 1 ? H("mint") : (valor > 0.5 ? H("amber") : H("text")));
-
-        this.btnHorno.setEnabled(this.pizzaState.sauce);
-        this.btnHorno.setLabel(valor >= 1 ? "Al horno ✔" : "Al horno");
-        this.btnUndo.setEnabled(this.historial.length > 0);
-        this.btnReset.setEnabled(this.historial.length > 0);
-
-        // El procedimiento se redibuja solo cuando cambia el paso.
-        let paso = 1;
-        if (this.pizzaState.sauce) paso = 2;
-        if (this.pizzaState.cheese || !this.order.cheese) paso = 3;
-        if (paso !== this.pasoActual) {
-            this.pasoActual = paso;
-            UI.procedimiento(this, paso);
-        }
-    }
-
-    dibujarAnillo(v) {
-        const r = this.anilloR, gr = this.anilloGrosor;
-        this.anillo.clear();
-        this.anillo.lineStyle(gr, C.line, 1);
-        this.anillo.strokeCircle(this.anilloX, this.anilloY, r);
-        if (v <= 0) return;
-        this.anillo.lineStyle(gr, v >= 1 ? C.mint : C.amber, 1);
-        this.anillo.beginPath();
-        this.anillo.arc(this.anilloX, this.anilloY, r, Phaser.Math.DegToRad(-90),
-            Phaser.Math.DegToRad(-90 + 360 * v), false);
-        this.anillo.strokePath();
-    }
-
-    /** Mensaje corto sobre la tabla: qué pasó y qué hacer. */
-    avisar(texto) {
-        if (this.aviso) this.aviso.destroy();
-        this.aviso = this.add.text(this.px, this.py + 186, texto, {
-            fontFamily: FONT_BODY, fontSize: "14px", fontStyle: "bold",
-            color: H("amber"), backgroundColor: "rgba(13,27,42,0.9)",
-            padding: { x: 12, y: 6 }
-        }).setOrigin(0.5).setDepth(500);
-        this.tweens.add({
-            targets: this.aviso, alpha: 0, delay: 1100 * MOTION, duration: 300 * MOTION,
-            onComplete: () => { if (this.aviso) { this.aviso.destroy(); this.aviso = null; } }
-        });
-    }
-
-    update(t, delta) {
-        this.tiempoArmado += delta;
-        if (this.cronoTxt) this.cronoTxt.setText((this.tiempoArmado / 1000).toFixed(1) + " s");
-    }
-
-    alHorno() {
-        if (!this.pizzaState.sauce) { SFX.denied(); this.avisar("Unta la salsa antes de hornear"); return; }
-        SFX.oven();
-
-        this.tweens.add({
-            targets: this.pizza, x: GAME_WIDTH + 260, angle: 18,
-            duration: 400 * MOTION, ease: "Cubic.in"
-        });
-
-        this.time.delayedCall(360 * MOTION, () => {
-            UI.irA(this, "OvenScene", {
-                order: this.order,
-                pizzaState: this.pizzaState,
-                tiempoArmado: this.tiempoArmado
-            });
-        });
-    }
+function onWheel(e) {
+    if (modo === 'recorrido') return;
+    e.preventDefault();
+    orbitRadius = clamp(orbitRadius + e.deltaY * 0.0035 * Math.max(orbitRadius * 0.5, 1), RADIO_MIN, RADIO_MAX);
 }
 
-/* ---------------------------------------------------------------------------
-   11. HORNO — dial con la pizza dentro y aguja que rebota
---------------------------------------------------------------------------- */
-
-class OvenScene extends Phaser.Scene {
-
-    constructor() { super("OvenScene"); }
-
-    init(data) {
-        this.order = data.order;
-        this.pizzaState = data.pizzaState;
-        this.tiempoArmado = data.tiempoArmado || 0;
+function onKeyDown(e) {
+    const k = e.key.toLowerCase();
+    if (modo === 'recorrido' && ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(k)) {
+        e.preventDefault();
     }
-
-    create() {
-        this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x1a0e08);
-        this.add.image(GAME_WIDTH / 2, GAME_HEIGHT / 2, "vineta").setAlpha(0.75);
-        UI.entrar(this);
-
-        this.cfg = configHorneado();
-
-        const top = UI.hud(this, "Vigila el punto de cocción");
-        UI.procedimiento(this, 4);
-
-        // Aguja que rebota: posición 0-100, dirección y velocidad en % por ms.
-        this.pos = 0;
-        this.dir = 1;
-        this.velBase = 100 / this.cfg.barridoMs;
-        this.vel = this.velBase;
-        this.velMax = this.velBase * HORNEADO.velocidadTope;
-        this.rebotes = 0;
-        this.tiempo = 0;
-        this.listo = false;
-        this.zonaActual = null;
-
-        const cx = (LAY.izqX + LAY.derX + LAY.colW) / 2 - 20;
-        const cy = LAY.filaY + 200;
-        this.cx = cx; this.cy = cy;
-        this.radioDial = 176;
-
-        UI.titulo(this, LAY.izqX + 8, top + 20, "Horno · 260 °C", "SÁCALA A TIEMPO", 0, 30);
-
-        // La dificultad se anuncia: se ve, no se adivina.
-        this.add.text(LAY.derX - 20, top + 22, `Ventana ${this.cfg.ancho}%`, {
-            fontFamily: FONT_TICKET, fontSize: "13px", color: H("muted")
-        }).setOrigin(1, 0);
-
-        this.add.text(LAY.derX - 20, top + 40, `Barrido ${(this.cfg.barridoMs / 1000).toFixed(1)} s`, {
-            fontFamily: FONT_TICKET, fontSize: "13px", color: H("muted")
-        }).setOrigin(1, 0);
-
-        /* ---- Dial ---- */
-        this.dialBase = this.add.graphics();
-        this.dibujarZonas();
-
-        /* ---- Llamas bajo la pizza, dentro del anillo ---- */
-        for (let i = 0; i < 9; i++) {
-            const f = this.add.image(cx - 160 + i * 40, cy + 150, "flama")
-                .setOrigin(0.5, 1).setScale(0.78).setAlpha(0.8);
-            if (!REDUCED_MOTION) {
-                this.tweens.add({
-                    targets: f, scaleY: 1.2, alpha: 0.45,
-                    duration: 380 + Math.random() * 380, yoyo: true, repeat: -1,
-                    ease: "Sine.inOut", delay: Math.random() * 300
-                });
-            }
-        }
-
-        /* ---- Pizza dentro del anillo ---- */
-        this.pizzaCont = this.add.container(cx, cy);
-        this.masa = this.add.image(0, 0, "masa_corteza").setScale(0.86);
-        this.pizzaCont.add(this.masa);
-        this.capas = [];
-
-        if (this.pizzaState.sauce) {
-            const s = this.add.image(0, 0, "salsa").setScale(0.86);
-            this.pizzaCont.add(s); this.capas.push(s);
-        }
-        if (this.pizzaState.cheese) {
-            const q = this.add.image(0, 0, "queso").setScale(0.86);
-            this.pizzaCont.add(q); this.capas.push(q);
-        }
-        TOPPING_KEYS.forEach(k => {
-            for (let i = 0; i < this.pizzaState.toppings[k]; i++) {
-                const a = Math.random() * Math.PI * 2, r = Math.random() * 104;
-                const p = this.add.image(Math.cos(a) * r, Math.sin(a) * r, "ing_" + k)
-                    .setAngle(randInt(0, 359)).setScale(0.9 * ING_K);
-                this.pizzaCont.add(p); this.capas.push(p);
-            }
-        });
-
-        this.pizzaCont.setScale(0.4).setAlpha(0);
-        this.tweens.add({ targets: this.pizzaCont, scale: 1, alpha: 1, duration: 420 * MOTION, ease: "Back.out" });
-        if (!REDUCED_MOTION) this.tweens.add({ targets: this.pizzaCont, angle: 360, duration: 26000, repeat: -1 });
-
-        this.cuenta = this.add.graphics();
-        this.aguja = this.add.graphics();
-
-        this.lectura = this.add.text(cx, cy + 246, "LE FALTA", {
-            fontFamily: FONT_DISPLAY, fontSize: "30px", color: H("amber")
-        }).setOrigin(0.5);
-
-        this.pista = this.add.text(cx, cy + 282, "Detén la aguja dentro de la franja verde", {
-            fontFamily: FONT_BODY, fontSize: "13px", color: H("muted")
-        }).setOrigin(0.5);
-
-        if (!REDUCED_MOTION) {
-            this.time.addEvent({
-                delay: 300, loop: true, callback: () => {
-                    if (this.listo) return;
-                    const v = this.add.image(cx + randInt(-66, 66), cy - 44, "vapor")
-                        .setScale(0.7).setAlpha(0.45);
-                    this.tweens.add({
-                        targets: v, y: cy - 190, scale: 1.8, alpha: 0,
-                        duration: 1600, onComplete: () => v.destroy()
-                    });
-                }
-            });
-        }
-
-        this.btn = UI.boton(this, cx, GAME_HEIGHT - 58, 320, 62, "Sacar pizza",
-            () => this.sacar(), { tono: "red", size: 18 });
-
-        this.add.image(cx - 124, GAME_HEIGHT - 58, "ut_pala").setScale(0.46).setAlpha(0.85);
-
-        this.input.keyboard.on("keydown-SPACE", () => this.sacar());
-        SFX.oven();
-    }
-
-    dibujarZonas() {
-        const g = this.dialBase;
-        const r = this.radioDial;
-        const ang = (pct) => Phaser.Math.DegToRad(135 + 270 * (pct / 100));
-        this.angDe = ang;
-
-        g.clear();
-
-        g.fillStyle(0x24140c, 1);
-        g.fillCircle(this.cx, this.cy, r + 30);
-        g.lineStyle(2, 0x3d2415, 1);
-        g.strokeCircle(this.cx, this.cy, r + 30);
-
-        const banda = (desde, hasta, color, grosor = 22) => {
-            g.lineStyle(grosor, color, 1);
-            g.beginPath();
-            g.arc(this.cx, this.cy, r, ang(desde), ang(hasta), false);
-            g.strokePath();
-        };
-
-        banda(0, this.cfg.inicio, C.amber);
-        banda(this.cfg.inicio, this.cfg.fin, C.mint);
-        banda(this.cfg.fin, 100, 0x5c2f16);
-        banda(this.cfg.nucleoIni, this.cfg.nucleoFin, 0xdcfff2, 9);   // núcleo con bono
-
-        g.lineStyle(2, 0x000000, 0.35);
-        for (let p = 0; p <= 100; p += 10) {
-            const a = ang(p);
-            g.beginPath();
-            g.moveTo(this.cx + Math.cos(a) * (r - 12), this.cy + Math.sin(a) * (r - 12));
-            g.lineTo(this.cx + Math.cos(a) * (r + 12), this.cy + Math.sin(a) * (r + 12));
-            g.strokePath();
-        }
-    }
-
-    update(t, delta) {
-        if (this.listo) return;
-
-        this.pos += this.dir * this.vel * delta;
-
-        if (this.pos >= 100) { this.pos = 100; this.dir = -1; this.acelerar(); }
-        else if (this.pos <= 0) { this.pos = 0; this.dir = 1; this.acelerar(); }
-
-        // El horno no espera: la pizza se dora aunque no la muevas.
-        this.tiempo += delta;
-        const consumido = Math.min(this.tiempo / this.cfg.limiteMs, 1);
-
-        this.masa.setTint(lerpColor(C.wood, 0x51301a, consumido));
-        this.capas.forEach(c => c.setTint(lerpColor(0xffffff, 0xb08050, consumido * 0.85)));
-
-        this.dibujarCuenta(1 - consumido);
-        this.dibujarAguja();
-        this.leerZona();
-
-        if (consumido >= 1) this.sacar(true);
-    }
-
-    acelerar() {
-        this.vel = Math.min(this.vel * HORNEADO.aceleracion, this.velMax);
-        this.rebotes += 1;
-        SFX.rebote();
-    }
-
-    dibujarAguja() {
-        const a = this.angDe(this.pos);
-        const r = this.radioDial;
-
-        this.aguja.clear();
-        this.aguja.lineStyle(5, 0xffffff, 1);
-        this.aguja.beginPath();
-        this.aguja.moveTo(this.cx + Math.cos(a) * (r - 30), this.cy + Math.sin(a) * (r - 30));
-        this.aguja.lineTo(this.cx + Math.cos(a) * (r + 22), this.cy + Math.sin(a) * (r + 22));
-        this.aguja.strokePath();
-        this.aguja.fillStyle(0xffffff, 1);
-        this.aguja.fillCircle(this.cx + Math.cos(a) * (r + 22), this.cy + Math.sin(a) * (r + 22), 7);
-    }
-
-    /** Anillo exterior que se vacía: cuánto falta para que se queme sola. */
-    dibujarCuenta(restante) {
-        const g = this.cuenta;
-        g.clear();
-        if (restante <= 0) return;
-        g.lineStyle(5, restante > 0.35 ? C.amber : C.red, 0.85);
-        g.beginPath();
-        g.arc(this.cx, this.cy, this.radioDial + 44,
-            Phaser.Math.DegToRad(135),
-            Phaser.Math.DegToRad(135 + 270 * restante), false);
-        g.strokePath();
-    }
-
-    /**
-     * Solo se actualiza al cambiar de zona: redibujar el texto en cada frame
-     * lo regenera a triple resolución 60 veces por segundo, y eso se nota.
-     */
-    leerZona() {
-        const p = this.pos;
-        const zona = p < this.cfg.inicio ? "falta" : (p <= this.cfg.fin ? "punto" : "pasado");
-        if (zona === this.zonaActual) return;
-        this.zonaActual = zona;
-
-        const t = {
-            falta:  ["LE FALTA",    "Todavía no llega al punto",     "amber", "muted"],
-            punto:  ["EN SU PUNTO", "Detén la aguja aquí",           "mint",  "mint"],
-            pasado: ["SE PASÓ",     "Se te fue: quedó sobre cocida", "red",   "red"]
-        }[zona];
-
-        this.lectura.setText(t[0]).setColor(H(t[2]));
-        this.pista.setText(t[1]).setColor(H(t[3]));
-
-        if (zona === "punto") SFX.tone(880, 0.05, "triangle", 0.045);
-    }
-
-    sacar(porTiempo = false) {
-        if (this.listo) return;
-        this.listo = true;
-
-        const p = this.pos;
-        const resultado = porTiempo ? "quemada"
-            : (p < this.cfg.inicio ? "cruda" : (p <= this.cfg.fin ? "perfecta" : "quemada"));
-        const exacto = !porTiempo && p >= this.cfg.nucleoIni && p <= this.cfg.nucleoFin;
-
-        this.aguja.clear();
-        this.cuenta.clear();
-
-        if (resultado === "perfecta") {
-            SFX.tone(exacto ? 1318 : 1046, 0.18, "triangle", 0.06);
-            if (exacto) {
-                const t = this.add.text(this.cx, this.cy, "¡EXACTO!", {
-                    fontFamily: FONT_DISPLAY, fontSize: "40px", color: H("mint")
-                }).setOrigin(0.5).setDepth(900).setScale(0.4);
-                this.tweens.add({ targets: t, scale: 1, duration: 260 * MOTION, ease: "Back.out" });
-            }
-        } else {
-            SFX.fail();
-            this.cameras.main.shake(200 * MOTION, 0.006);
-        }
-
-        this.tweens.add({
-            targets: this.pizzaCont, y: this.cy - 320, alpha: 0,
-            duration: 380 * MOTION, ease: "Cubic.in"
-        });
-
-        this.time.delayedCall(420 * MOTION, () => {
-            UI.irA(this, "ResultScene", {
-                order: this.order,
-                pizzaState: this.pizzaState,
-                bakeResult: resultado,
-                bakeExacto: exacto,
-                tiempoArmado: this.tiempoArmado
-            });
-        });
-    }
+    FP.teclas[k] = true;
 }
 
-/* ---------------------------------------------------------------------------
-   12. RESULTADO — verificación contra la comanda
---------------------------------------------------------------------------- */
-
-class ResultScene extends Phaser.Scene {
-
-    constructor() { super("ResultScene"); }
-
-    init(data) {
-        this.order = data.order;
-        this.pizzaState = data.pizzaState;
-        this.bakeResult = data.bakeResult;
-        this.bakeExacto = !!data.bakeExacto;
-        this.tiempoArmado = data.tiempoArmado || 0;
-    }
-
-    create() {
-        UI.fondo(this);
-        UI.entrar(this);
-
-        const r = this.evaluar();
-        this.aplicar(r);
-
-        const top = UI.hud(this, "Verificación del pedido");
-        UI.procedimiento(this, 5);
-
-        const cx = (LAY.izqX + LAY.derX) / 2 + 10;
-        const zonaX = LAY.izqX;
-        const zonaW = LAY.derX - LAY.izqX - 20;
-
-        const veredicto = r.estrellas === 3 ? "PEDIDO PERFECTO"
-            : r.estrellas === 2 ? "PEDIDO ACEPTABLE"
-            : r.estrellas === 1 ? "PEDIDO CON ERRORES"
-            : "PEDIDO RECHAZADO";
-
-        UI.titulo(this, cx, top + 20, `Ticket ${String(GameState.pedidoNumero).padStart(3, "0")}`, veredicto, 0.5, 36);
-        UI.estrellas(this, cx, top + 108, r.estrellas, 1);
-
-        if (r.estrellas === 3) { SFX.win(); this.confeti(); }
-        else if (r.estrellas === 0) SFX.fail();
-
-        /* ---- Detalle en dos columnas ---- */
-        const py = top + 148;
-        UI.panel(this, zonaX, py, zonaW, 230);
-
-        const colW = zonaW / 2;
-        [0, 1].forEach(i => {
-            this.add.text(zonaX + 28 + i * colW, py + 18, "INGREDIENTE", {
-                fontFamily: FONT_BODY, fontSize: "10px", fontStyle: "bold",
-                color: H("muted"), letterSpacing: 2
-            });
-        });
-
-        const mitad = Math.ceil(r.detalle.length / 2);
-        r.detalle.forEach((item, i) => {
-            const col = i < mitad ? 0 : 1;
-            const fila = i < mitad ? i : i - mitad;
-            const x = zonaX + 28 + col * colW;
-            const y = py + 46 + fila * 32;
-
-            const etiqueta = item.ok ? "correcto" : (item.extra ? "no iba" : "faltó");
-
-            const nombre = this.add.text(x, y, item.nombre, {
-                fontFamily: FONT_TICKET, fontSize: "15px",
-                color: item.ok ? H("text") : H("red")
-            });
-            const estado = this.add.text(x + colW - 56, y, `${item.ok ? "✔" : "✕"} ${etiqueta}`, {
-                fontFamily: FONT_BODY, fontSize: "13px", fontStyle: "bold",
-                color: item.ok ? H("mint") : H("red")
-            }).setOrigin(1, 0);
-
-            [nombre, estado].forEach(o => {
-                o.setAlpha(0);
-                this.tweens.add({ targets: o, alpha: 1, duration: 180 * MOTION, delay: (60 + i * 45) * MOTION });
-            });
-        });
-
-        /* ---- Desglose de puntos ---- */
-        const dy = py + 246;
-        UI.panel(this, zonaX, dy, zonaW, 110, { fill: C.panelSoft, alpha: 0.6 });
-
-        const chip = (i, etiqueta, valor, color) => {
-            const x = zonaX + zonaW / 4 * (i + 0.5);
-            this.add.text(x, dy + 24, etiqueta.toUpperCase(), {
-                fontFamily: FONT_BODY, fontSize: "10px", fontStyle: "bold",
-                color: H("muted"), letterSpacing: 1
-            }).setOrigin(0.5);
-            this.add.text(x, dy + 46, valor, {
-                fontFamily: FONT_DISPLAY, fontSize: "24px", color: H(color)
-            }).setOrigin(0.5);
-        };
-
-        const textoHorno = this.bakeExacto
-            ? "Exacto"
-            : { cruda: "Cruda", perfecta: "En su punto", quemada: "Quemada" }[this.bakeResult];
-
-        chip(0, "Horneado", textoHorno, this.bakeResult === "perfecta" ? "mint" : "red");
-        chip(1, "Tiempo de armado", (this.tiempoArmado / 1000).toFixed(1) + " s", "text");
-        chip(2, "Puntos del pedido", "+" + r.puntos, "amber");
-        chip(3, "Total del turno", String(GameState.score), "text");
-
-        const bonos = [];
-        if (this.bakeExacto) bonos.push("Punto exacto · +70");
-        if (r.bonoTiempo) bonos.push(`${r.bonoTiempo.etiqueta} · +${r.bonoTiempo.puntos}`);
-
-        if (bonos.length) {
-            this.add.text(zonaX + zonaW / 2, dy + 86, bonos.join("       "), {
-                fontFamily: FONT_TICKET, fontSize: "12px", color: H("mint")
-            }).setOrigin(0.5);
-        }
-
-        /* ---- Siguiente ---- */
-        const ultimo = GameState.historialPedidos.length >= SESSION_ORDER_LIMIT;
-        const label = ultimo
-            ? "Ver resumen del turno"
-            : `Siguiente pedido · ${GameState.historialPedidos.length + 1} de ${SESSION_ORDER_LIMIT}`;
-
-        const ir = () => UI.irA(this, ultimo ? "SummaryScene" : "OrderScene");
-        UI.boton(this, cx, GAME_HEIGHT - 52, 380, 58, label, ir, { tono: ultimo ? "blue" : "red", size: 16 });
-        this.input.keyboard.on("keydown-SPACE", ir);
-    }
-
-    confeti() {
-        const colores = [C.red, C.amber, C.mint, C.blue, C.cream];
-        for (let i = 0; i < 70; i++) {
-            const c = this.add.image(GAME_WIDTH / 2 + randInt(-60, 60), 150, "chispa")
-                .setTint(colores[i % colores.length])
-                .setScale(randInt(6, 15) / 10)
-                .setAngle(randInt(0, 359))
-                .setDepth(500);
-            this.tweens.add({
-                targets: c,
-                x: c.x + randInt(-480, 480),
-                y: GAME_HEIGHT + 40,
-                angle: c.angle + randInt(180, 720),
-                duration: (1200 + Math.random() * 900) * MOTION,
-                delay: Math.random() * 280 * MOTION,
-                ease: "Cubic.in",
-                onComplete: () => c.destroy()
-            });
-        }
-    }
-
-    evaluar() {
-        const detalle = [];
-        let correctos = 0, faltantes = 0, extras = 0;
-
-        const puesto = (key) => {
-            if (key === "salsa") return this.pizzaState.sauce;
-            if (key === "queso") return this.pizzaState.cheese;
-            return this.pizzaState.toppings[key] >= MIN_PIEZAS_VALIDAS;
-        };
-
-        const revisar = (key, requerido) => {
-            const hay = puesto(key);
-            const ok = requerido === hay;
-            detalle.push({ nombre: NOMBRES[key], ok, extra: !requerido && hay });
-            if (ok) correctos++;
-            else if (requerido) faltantes++;
-            else extras++;
-        };
-
-        revisar("salsa", this.order.sauce);
-        revisar("queso", this.order.cheese);
-        TOPPING_KEYS.forEach(k => revisar(k, this.order.toppings.includes(k)));
-
-        const bakeOk = this.bakeResult === "perfecta";
-        const errores = faltantes + extras;
-        const perfecto = errores === 0 && bakeOk;
-
-        let puntos = correctos * 100 - faltantes * 60 - extras * 40;
-        if (bakeOk) puntos += 90;
-        if (this.bakeExacto) puntos += 70;
-        if (perfecto) puntos += 160;
-
-        let bonoTiempo = null;
-        if (errores === 0) {
-            const seg = this.tiempoArmado / 1000;
-            bonoTiempo = BONO_TIEMPO.find(b => seg <= b.hasta) || null;
-            if (bonoTiempo) puntos += bonoTiempo.puntos;
-        }
-
-        const estrellas = perfecto ? 3
-            : (errores === 0 || bakeOk) ? 2
-            : errores <= 2 ? 1 : 0;
-
-        return {
-            detalle, correctos, faltantes, extras, bakeOk, perfecto,
-            errores, estrellas, bonoTiempo,
-            puntos: Math.max(puntos, 0)
-        };
-    }
-
-    aplicar(r) {
-        GameState.score += r.puntos;
-        GameState.streak = r.perfecto ? GameState.streak + 1 : 0;
-        GameState.mejorRacha = Math.max(GameState.mejorRacha, GameState.streak);
-        GameState.historialPedidos.push({
-            puntos: r.puntos,
-            correctos: r.correctos,
-            faltantes: r.faltantes,
-            extras: r.extras,
-            estrellas: r.estrellas,
-            bakeResult: this.bakeResult,
-            segundos: this.tiempoArmado / 1000,
-            perfecto: r.perfecto
-        });
-
-        reportarTurno();   // el Panel de KPIs se entera pedido a pedido
-    }
+function onKeyUp(e) {
+    FP.teclas[e.key.toLowerCase()] = false;
 }
 
-/* ---------------------------------------------------------------------------
-   13. RESUMEN — KPIs del turno
---------------------------------------------------------------------------- */
-
-class SummaryScene extends Phaser.Scene {
-
-    constructor() { super("SummaryScene"); }
-
-    create() {
-        UI.fondo(this);
-        UI.entrar(this);
-
-        const h = GameState.historialPedidos;
-        const total = h.length || 1;
-        const perfectos = h.filter(p => p.perfecto).length;
-        const pctPerfectos = Math.round((perfectos / total) * 100);
-        const promCorrectos = h.reduce((a, p) => a + p.correctos, 0) / total;
-        const promSeg = h.reduce((a, p) => a + p.segundos, 0) / total;
-        const promEstrellas = h.reduce((a, p) => a + p.estrellas, 0) / total;
-        const bake = { cruda: 0, perfecta: 0, quemada: 0 };
-        h.forEach(p => bake[p.bakeResult]++);
-
-        // Cierre del turno. Comparte id con los reportes por pedido, así que
-        // actualiza ese registro en vez de agregar uno nuevo.
-        reportarTurno();
-
-        const top = UI.hud(this, "Resumen del turno");
-        const cx = GAME_WIDTH / 2;
-
-        UI.titulo(this, cx, top + 24, `${h.length} pedidos completados`, "RESUMEN DEL TURNO", 0.5, 38);
-        UI.estrellas(this, cx, top + 116, Math.round(promEstrellas), 1);
-
-        /* ---- Tarjetas de KPI con conteo animado ---- */
-        const kpis = [
-            { et: "Puntos del turno", val: GameState.score, suf: "", color: "amber" },
-            { et: "Pedidos perfectos", val: pctPerfectos, suf: "%", color: "mint" },
-            { et: "Mejor racha", val: GameState.mejorRacha, suf: "", color: "red" },
-            { et: "Ingredientes OK", val: promCorrectos, suf: " prom", color: "blue", dec: 1 }
-        ];
-
-        const cw = 272, ch = 104, gap = 18;
-        const sx = (GAME_WIDTH - (kpis.length * cw + (kpis.length - 1) * gap)) / 2;
-        const cy = top + 156;
-
-        kpis.forEach((k, i) => {
-            const x = sx + i * (cw + gap);
-            UI.panel(this, x, cy, cw, ch);
-
-            const franja = this.add.graphics();
-            franja.fillStyle(C[k.color], 1);
-            franja.fillRoundedRect(x, cy, cw, 5, 2);
-
-            this.add.text(x + 20, cy + 24, k.et.toUpperCase(), {
-                fontFamily: FONT_BODY, fontSize: "11px", fontStyle: "bold",
-                color: H("muted"), letterSpacing: 1
-            });
-
-            const num = this.add.text(x + 20, cy + 48, "0", {
-                fontFamily: FONT_DISPLAY, fontSize: "36px", color: H(k.color)
-            });
-
-            const obj = { v: 0 };
-            this.tweens.add({
-                targets: obj, v: k.val, duration: 900 * MOTION, delay: (150 + i * 90) * MOTION,
-                ease: "Cubic.out",
-                onUpdate: () => num.setText((k.dec ? obj.v.toFixed(k.dec) : Math.round(obj.v)) + k.suf)
-            });
-        });
-
-        /* ---- Gráfica de cocción ---- */
-        const gy = cy + ch + 26;
-        const gw = GAME_WIDTH - sx * 2;
-        UI.panel(this, sx, gy, gw, 226, { fill: C.panelSoft, alpha: 0.5 });
-
-        this.add.text(sx + 22, gy + 18, "PUNTO DE COCCIÓN", {
-            fontFamily: FONT_BODY, fontSize: "11px", fontStyle: "bold",
-            color: H("muted"), letterSpacing: 2
-        });
-
-        this.add.text(sx + gw - 22, gy + 18, `Armado promedio ${promSeg.toFixed(1)} s`, {
-            fontFamily: FONT_TICKET, fontSize: "13px", color: H("muted")
-        }).setOrigin(1, 0);
-
-        const barras = [
-            { et: "Cruda", n: bake.cruda, c: C.amber },
-            { et: "En su punto", n: bake.perfecta, c: C.mint },
-            { et: "Quemada", n: bake.quemada, c: 0x8a4a22 }
-        ];
-
-        const maxN = Math.max(1, ...barras.map(b => b.n));
-        const baseY = gy + 180;
-        const maxH = 104;
-        const bw = 104;
-        const bStart = GAME_WIDTH / 2 - (barras.length * bw + (barras.length - 1) * 60) / 2;
-
-        barras.forEach((b, i) => {
-            const x = bStart + i * (bw + 60);
-            const hFinal = Math.max((b.n / maxN) * maxH, 5);
-
-            const g = this.add.graphics();
-            const obj = { h: 0 };
-            this.tweens.add({
-                targets: obj, h: hFinal, duration: 700 * MOTION, delay: (320 + i * 120) * MOTION,
-                ease: "Cubic.out",
-                onUpdate: () => {
-                    g.clear();
-                    g.fillStyle(b.c, 1);
-                    g.fillRoundedRect(x, baseY - obj.h, bw, obj.h, 7);
-                }
-            });
-
-            this.add.text(x + bw / 2, baseY - hFinal - 24, String(b.n), {
-                fontFamily: FONT_DISPLAY, fontSize: "22px", color: H("text")
-            }).setOrigin(0.5);
-
-            this.add.text(x + bw / 2, baseY + 12, b.et, {
-                fontFamily: FONT_BODY, fontSize: "13px", color: H("muted")
-            }).setOrigin(0.5, 0);
-        });
-
-        /* ---- Acciones ---- */
-        const nuevo = () => { reiniciarSesion(); UI.irA(this, "OrderScene"); };
-        UI.boton(this, cx - 116, GAME_HEIGHT - 48, 220, 54, "Repetir turno", nuevo, { tono: "red", size: 15 });
-        UI.boton(this, cx + 116, GAME_HEIGHT - 48, 220, 54, "Volver al inicio",
-            () => UI.irA(this, "IntroScene"), { tono: "ghost", size: 15 });
-
-        this.input.keyboard.on("keydown-SPACE", nuevo);
-    }
+function raycastEstacion(e) {
+    if (!hitboxes.length) return null;
+    const r = renderer.domElement.getBoundingClientRect();
+    puntero.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+    puntero.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+    raycaster.setFromCamera(puntero, camara);
+    const hits = raycaster.intersectObjects(hitboxes, false);
+    return hits.length ? hits[0].object.userData.estacion : null;
 }
 
-/* ---------------------------------------------------------------------------
-   14. ARRANQUE
---------------------------------------------------------------------------- */
+function onResize() {
+    if (!contenedor) return;
+    ancho = contenedor.clientWidth;
+    alto = contenedor.clientHeight || 600;
+    camara.aspect = ancho / alto;
+    camara.updateProjectionMatrix();
+    renderer.setSize(ancho, alto);
+}
 
-const config = {
-    type: Phaser.AUTO,
-    parent: "game-container",
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
-    backgroundColor: "#0d1b2a",
-    render: {
-        antialias: true,
-        roundPixels: false,
-        powerPreference: "high-performance"
-    },
-    scale: {
-        // El contenedor se topa en 1280 px (ver styles.css), así que FIT
-        // resuelve escala 1.0 y el canvas se dibuja a tamaño nativo.
-        mode: Phaser.Scale.FIT,
-        autoCenter: Phaser.Scale.CENTER_BOTH,
+/* ==========================================================================
+   18 · MINIMAPA
+   Vista de planta que muestra dónde estás parado. Es la pieza que de verdad
+   ayuda a orientarse cuando andas caminando en primera persona.
+   ========================================================================== */
+function dibujarMinimapa() {
+    if (!mapaCtx) return;
+    const W = mapaCanvas.width, H = mapaCanvas.height;
+    const aX = v => ((v + LIM_X) / COCINA.ancho) * W;
+    const aZ = v => ((v + LIM_Z) / COCINA.fondo) * H;
 
-        // expandParent y max son el seguro contra el lienzo desbocado.
-        //
-        // Phaser mide el contenedor para calcular su escala. Si el
-        // contenedor no tiene altura propia, la hereda del canvas, y
-        // entonces cada medición lee un padre más grande y agranda el
-        // canvas otra vez: el juego crece solo hasta reventar la página.
-        //
-        // expandParent:false impide que Phaser toque el contenedor, y
-        // max le pone un techo al lienzo. Aun si alguien borrara las
-        // reglas de #game-container en el CSS, el juego no se dispara.
-        expandParent: false,
-        max: { width: GAME_WIDTH, height: GAME_HEIGHT }
-    },
-    scene: [BootScene, IntroScene, OrderScene, AssemblyScene, OvenScene, ResultScene, SummaryScene]
-};
+    mapaCtx.clearRect(0, 0, W, H);
+    mapaCtx.fillStyle = 'rgba(0, 34, 68, 0.86)';
+    mapaCtx.fillRect(0, 0, W, H);
 
-new Phaser.Game(config);
+    // Muebles
+    mapaCtx.fillStyle = 'rgba(255,255,255,0.14)';
+    OBSTACULOS.forEach(o => {
+        mapaCtx.fillRect(aX(o.x0), aZ(o.z0), aX(o.x1) - aX(o.x0), aZ(o.z1) - aZ(o.z0));
+    });
+
+    // Estaciones
+    ESTACIONES.forEach(st => {
+        const x = aX(st.pos[0]), y = aZ(st.pos[1]);
+        const activa = st.id === estacionActiva;
+        mapaCtx.beginPath();
+        mapaCtx.arc(x, y, activa ? 9 : 7, 0, Math.PI * 2);
+        mapaCtx.fillStyle = activa ? '#e31837' : '#0077b6';
+        mapaCtx.fill();
+        mapaCtx.fillStyle = '#ffffff';
+        mapaCtx.font = 'bold 9px Arial, sans-serif';
+        mapaCtx.textAlign = 'center';
+        mapaCtx.textBaseline = 'middle';
+        mapaCtx.fillText(String(st.orden), x, y + 0.5);
+    });
+
+    // Tú
+    const px = aX(modo === 'recorrido' ? FP.pos.x : camara.position.x);
+    const py = aZ(modo === 'recorrido' ? FP.pos.z : camara.position.z);
+    const rumbo = modo === 'recorrido'
+        ? FP.yaw
+        : Math.atan2(camara.position.x - orbitTarget.x, camara.position.z - orbitTarget.z) + Math.PI;
+
+    mapaCtx.save();
+    mapaCtx.translate(px, py);
+    mapaCtx.rotate(-rumbo);
+    mapaCtx.beginPath();
+    mapaCtx.moveTo(0, -9);
+    mapaCtx.lineTo(6, 7);
+    mapaCtx.lineTo(0, 3.5);
+    mapaCtx.lineTo(-6, 7);
+    mapaCtx.closePath();
+    mapaCtx.fillStyle = '#ffd166';
+    mapaCtx.fill();
+    mapaCtx.restore();
+}
+
+/* ==========================================================================
+   19 · BUCLE
+   ========================================================================== */
+function animate() {
+    const ahora = performance.now();
+    const dt = Math.min((ahora - reloj) / 1000, 0.05);
+    reloj = ahora;
+
+    // Parpadeo del horno
+    tiempoHorno += dt;
+    if (luzHorno) luzHorno.intensity = 8 + Math.sin(tiempoHorno * 2.6) * 1.4 + Math.sin(tiempoHorno * 7.1) * 0.6;
+
+    if (modo === 'recorrido') {
+        actualizarRecorrido(dt);
+    } else if (camAnim) {
+        const t = Math.min(1, (ahora - camAnim.t0) / camAnim.dur);
+        const e = t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        camara.position.lerpVectors(camAnim.desdePos, camAnim.haciaPos, e);
+        orbitTarget.lerpVectors(camAnim.desdeTarget, camAnim.haciaTarget, e);
+        camara.lookAt(orbitTarget);
+        if (t >= 1) { camAnim = null; sincronizarOrbita(camara.position, orbitTarget); }
+    } else {
+        camara.position.set(
+            orbitTarget.x + orbitRadius * Math.sin(orbitPhi) * Math.sin(orbitTheta),
+            Math.max(0.35, orbitTarget.y + orbitRadius * Math.cos(orbitPhi)),
+            orbitTarget.z + orbitRadius * Math.sin(orbitPhi) * Math.cos(orbitTheta)
+        );
+        camara.lookAt(orbitTarget);
+    }
+
+    dibujarMinimapa();
+    renderer.render(scene, camara);
+}
+
+function actualizarRecorrido(dt) {
+    const t = FP.teclas;
+    const adelante = (t['w'] || t['arrowup'] ? 1 : 0) - (t['s'] || t['arrowdown'] ? 1 : 0);
+    const lado = (t['d'] || t['arrowright'] ? 1 : 0) - (t['a'] || t['arrowleft'] ? 1 : 0);
+
+    if (adelante || lado) {
+        const vel = FP.velocidad * (t['shift'] ? 1.7 : 1) * dt;
+        const sin = Math.sin(FP.yaw), cos = Math.cos(FP.yaw);
+        let dx = (-sin * adelante + cos * lado);
+        let dz = (-cos * adelante - sin * lado);
+        const largo = Math.hypot(dx, dz) || 1;
+        moverConColision(FP.pos.x + (dx / largo) * vel, FP.pos.z + (dz / largo) * vel);
+    }
+
+    camara.position.copy(FP.pos);
+    const mira = new Vector3(
+        FP.pos.x - Math.sin(FP.yaw) * Math.cos(FP.pitch),
+        FP.pos.y + Math.sin(FP.pitch),
+        FP.pos.z - Math.cos(FP.yaw) * Math.cos(FP.pitch)
+    );
+    camara.lookAt(mira);
+    orbitTarget.copy(mira);
+}
+
+/* ==========================================================================
+   ARRANQUE
+   ========================================================================== */
+init();
+if (renderer) renderer.setAnimationLoop(animate);
